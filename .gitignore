@@ -1,0 +1,40 @@
+# .gitignore for Python project
+# General
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# VSCode settings
+.vscode/
+
+# macOS Finder metadata
+.DS_Store
+
+# Python egg files
+*.egg-info/
+
+# Test and coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Logs
+*.log
+
+# Ignore everything else that is temporary or OS generated
+*.swp
+*.swo
+
+# Note: The 'images/' directory is intentionally NOT ignored so that image assets are tracked.
