@@ -73,11 +73,31 @@ class ImageQualityChecker:
         if contrast < 40:
             rec.append("Increase Contrast")
 
-        return rec, avoid
+        return rec
 
     # ----------------------------
     # Print Report
     # ----------------------------
+    def analyze(self):
+        """Return a dictionary of quality metrics and recommendations.
+
+        The dictionary matches the format described in the project spec.
+        """
+        blur = self.blur_score()
+        bright = self.brightness()
+        contrast = self.contrast()
+        noise = self.noise_score()
+        width, height = self.resolution()
+        rec = self.recommendations()
+        return {
+            "blur": blur,
+            "brightness": bright,
+            "contrast": contrast,
+            "noise": noise,
+            "resolution": f"{width}x{height}",
+            "recommendations": rec,
+        }
+
     def report(self):
 
         blur = self.blur_score()
@@ -86,7 +106,7 @@ class ImageQualityChecker:
         noise = self.noise_score()
         width, height = self.resolution()
 
-        rec, avoid = self.recommendations()
+        rec = self.recommendations()
 
         print("=" * 60)
         print(f"IMAGE : {os.path.basename(self.image_path)}")
@@ -101,11 +121,6 @@ class ImageQualityChecker:
         print("\nRecommended:")
         for r in rec:
             print(f"  ✓ {r}")
-
-        if avoid:
-            print("\nAvoid:")
-            for a in avoid:
-                print(f"  ✗ {a}")
 
         print("\n")
 
