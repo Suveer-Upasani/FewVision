@@ -90,10 +90,10 @@ class ImageQualityChecker:
         width, height = self.resolution()
         rec = self.recommendations()
         return {
-            "blur": blur,
-            "brightness": bright,
-            "contrast": contrast,
-            "noise": noise,
+            "blur": float(blur),
+            "brightness": float(bright),
+            "contrast": float(contrast),
+            "noise": float(noise),
             "resolution": f"{width}x{height}",
             "recommendations": rec,
         }

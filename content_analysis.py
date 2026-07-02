@@ -1,26 +1,23 @@
 # content_analysis.py
-"""Content analysis utilities for the computer‑vision pipeline.
+"""Content analysis module for extracting scene and object metrics from images.
 
-The module provides a `ContentAnalyzer` class that extracts a set of
-high‑level descriptors from a single image.  All methods operate on the
-image loaded from `image_path` using OpenCV (cv2) and NumPy.
-
-The returned dictionary matches the specification in the user's
-proposal.
+Provides the `ContentAnalyzer` class with an `analyze(image_path)` method returning a dictionary
+with the following keys:
+- background: one of "Simple", "Moderate", "Complex" based on edge density.
+- lighting: one of "Dark", "Normal", "Bright" based on mean brightness.
+- object_coverage: percentage of image area covered by primary object (0-100).
+- orientation: rotation angle of the main object's bounding box in degrees.
+- aspect_ratio: width/height ratio of the main object.
+- center_offset: distance (in % of image diagonal) between image centre and object centre.
 """
 
 import cv2
 import numpy as np
 import os
-from typing import Dict
+
 
 class ContentAnalyzer:
-    """Analyze the *content* of an image.
-
-    Mirrors the structure of `ImageQualityChecker` – instantiated with the
-    path to an image and provides an ``analyze`` method that returns a flat
-    dictionary of metrics.
-    """
+    """Analyze content characteristics of an image."""
 
     def __init__(self, image_path: str):
         self.image_path = image_path
@@ -31,118 +28,78 @@ class ContentAnalyzer:
         self.height, self.width = self.gray.shape
 
     # ---------------------------------------------------------------------
-    # 1. Background complexity – Simple / Moderate / Complex
+    # Background complexity – based on edge density
     # ---------------------------------------------------------------------
     def _background_complexity(self) -> str:
-        # Edge density using Canny
         edges = cv2.Canny(self.gray, 100, 200)
-        edge_density = np.sum(edges > 0) / edges.size
-        # Entropy of grayscale histogram
-        hist = cv2.calcHist([self.gray], [0], None, [256], [0, 256]).ravel()
-        hist_norm = hist / hist.sum()
-        entropy = -np.sum(hist_norm * np.log2(hist_norm + 1e-12))
-        # Simple heuristic thresholds
-        if edge_density < 0.02 and entropy < 3.5:
+        edge_density = np.sum(edges > 0) / (self.width * self.height)
+        if edge_density < 0.05:
             return "Simple"
-        if edge_density < 0.07 and entropy < 5.5:
+        elif edge_density < 0.15:
             return "Moderate"
-        return "Complex"
+        else:
+            return "Complex"
 
     # ---------------------------------------------------------------------
-    # 2. Lighting – Dark / Normal / Bright (based on brightness value)
+    # Lighting – mean brightness categorisation
     # ---------------------------------------------------------------------
-    def _lighting_category(self, brightness: float) -> str:
-        if brightness < 80:
+    def _lighting(self) -> str:
+        mean_val = np.mean(self.gray)
+        if mean_val < 70:
             return "Dark"
-        if brightness > 180:
+        elif mean_val > 180:
             return "Bright"
-        return "Normal"
+        else:
+            return "Normal"
 
     # ---------------------------------------------------------------------
-    # 3. Object coverage – percentage of image occupied by the largest contour
+    # Object coverage – Otsu threshold to separate foreground/background
     # ---------------------------------------------------------------------
     def _object_coverage(self) -> float:
-        _, thresh = cv2.threshold(self.gray, 0, 255, cv2.THRESH_OTSU)
-        contours, _ = cv2.findContours(
-            thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if not contours:
-            return 0.0
-        largest = max(contours, key=cv2.contourArea)
-        area = cv2.contourArea(largest)
-        return (area / (self.width * self.height)) * 100.0
+        _, mask = cv2.threshold(self.gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        if np.sum(mask == 255) < np.sum(mask == 0):
+            mask = cv2.bitwise_not(mask)
+        coverage = np.sum(mask == 255) / (self.width * self.height) * 100.0
+        return round(coverage, 2)
 
     # ---------------------------------------------------------------------
-    # 4. Orientation – dominant angle of the largest contour
+    # Orientation, aspect ratio and centre offset – based on largest contour
     # ---------------------------------------------------------------------
-    def _orientation(self) -> float:
-        _, thresh = cv2.threshold(self.gray, 0, 255, cv2.THRESH_OTSU)
-        contours, _ = cv2.findContours(
-            thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
+    def _object_geometry(self):
+        _, mask = cv2.threshold(self.gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        if np.sum(mask == 255) < np.sum(mask == 0):
+            mask = cv2.bitwise_not(mask)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
-            return 0.0
+            return 0.0, 1.0, 0.0
         largest = max(contours, key=cv2.contourArea)
         rect = cv2.minAreaRect(largest)
-        angle = rect[2]
-        if angle < -45:
-            angle = 90 + angle
-        return round(angle, 2)
-
-    # ---------------------------------------------------------------------
-    # 5. Aspect ratio – width / height of the bounding box of the largest contour
-    # ---------------------------------------------------------------------
-    def _aspect_ratio(self) -> float:
-        _, thresh = cv2.threshold(self.gray, 0, 255, cv2.THRESH_OTSU)
-        contours, _ = cv2.findContours(
-            thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if not contours:
-            return 1.0
-        largest = max(contours, key=cv2.contourArea)
-        x, y, w, h = cv2.boundingRect(largest)
-        if h == 0:
-            return 0.0
-        return round(w / h, 2)
-
-    # ---------------------------------------------------------------------
-    # 6. Centeredness – distance of contour centroid from image centre (percent)
-    # ---------------------------------------------------------------------
-    def _centeredness(self) -> float:
-        _, thresh = cv2.threshold(self.gray, 0, 255, cv2.THRESH_OTSU)
-        contours, _ = cv2.findContours(
-            thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if not contours:
-            return 0.0
-        largest = max(contours, key=cv2.contourArea)
-        M = cv2.moments(largest)
-        if M["m00"] == 0:
-            return 0.0
-        cx = M["m10"] / M["m00"]
-        cy = M["m01"] / M["m00"]
-        center_x = self.width / 2.0
-        center_y = self.height / 2.0
-        offset = np.sqrt((cx - center_x) ** 2 + (cy - center_y) ** 2)
+        (cx, cy), (w, h), angle = rect
+        if w < h:
+            angle = angle + 90
+        orientation = round(angle, 2)
+        aspect_ratio = round(w / h if h != 0 else 0, 2)
+        img_cx, img_cy = self.width / 2.0, self.height / 2.0
         diag = np.sqrt(self.width ** 2 + self.height ** 2)
-        return round((offset / diag) * 100.0, 2)
+        offset_px = np.sqrt((cx - img_cx) ** 2 + (cy - img_cy) ** 2)
+        offset_pct = round((offset_px / diag) * 100, 2)
+        return orientation, aspect_ratio, offset_pct
 
-    # ---------------------------------------------------------------------
-    # Public API – combine everything
-    # ---------------------------------------------------------------------
-    def analyze(self) -> Dict[str, object]:
-        """Return a dictionary with all content‑related metrics."""
-        brightness = np.mean(self.gray)
+    def analyze(self) -> dict:
+        """Return a dictionary with all content metrics for the image."""
+        background = self._background_complexity()
+        lighting = self._lighting()
+        coverage = self._object_coverage()
+        orientation, aspect_ratio, center_offset = self._object_geometry()
         return {
-            "background": self._background_complexity(),
-            "lighting": self._lighting_category(brightness),
-            "object_coverage": round(self._object_coverage(), 2),
-            "orientation": self._orientation(),
-            "aspect_ratio": self._aspect_ratio(),
-            "center_offset": self._centeredness(),
+            "background": background,
+            "lighting": lighting,
+            "object_coverage": coverage,
+            "orientation": orientation,
+            "aspect_ratio": aspect_ratio,
+            "center_offset": center_offset,
         }
 
-# Quick test when run directly
 if __name__ == "__main__":
     import sys
     if len(sys.argv) != 2:

@@ -1,76 +1,66 @@
 [
   {
+    "image": "Screenshot 2026-07-01 at 6.08.56\u202fPM.png",
+    "image_path": "/Users/suveer/few_shot/images/Screenshot 2026-07-01 at 6.08.56\u202fPM.png",
     "blur": 869.9545620061087,
     "brightness": 242.619255372341,
-    "contrast": 50.54120152729043,
-    "noise": 6.985011577606201,
+    "contrast": 50.54120152729045,
+    "noise": 6.985011100769043,
     "resolution": "788x934",
-    "recommendations": [
-      "Small Rotation",
-      "Horizontal Flip",
-      "Decrease Brightness"
-    ],
-    "background": "Moderate",
+    "recommendations": [],
+    "background": "Simple",
     "lighting": "Bright",
-    "object_coverage": 99.19,
-    "orientation": 0.0,
-    "aspect_ratio": 0.84,
-    "center_offset": 0.17,
-    "image_name": "Screenshot 2026-07-01 at 6.08.56\u202fPM.png"
+    "object_coverage": 94.78,
+    "orientation": -90.0,
+    "aspect_ratio": 1.18,
+    "center_offset": 0.17
   },
   {
-    "blur": 765.5727181835218,
+    "image": "Screenshot 2026-07-01 at 6.09.21\u202fPM.png",
+    "image_path": "/Users/suveer/few_shot/images/Screenshot 2026-07-01 at 6.09.21\u202fPM.png",
+    "blur": 765.572718183522,
     "brightness": 98.75020737410289,
-    "contrast": 107.8278699166434,
+    "contrast": 107.82786991664337,
     "noise": 6.459029674530029,
     "resolution": "1158x862",
-    "recommendations": [
-      "Small Rotation",
-      "Horizontal Flip"
-    ],
+    "recommendations": [],
     "background": "Simple",
     "lighting": "Normal",
-    "object_coverage": 38.39,
+    "object_coverage": 67.19,
     "orientation": 0.0,
-    "aspect_ratio": 1.0,
-    "center_offset": 1.05,
-    "image_name": "Screenshot 2026-07-01 at 6.09.21\u202fPM.png"
+    "aspect_ratio": 0.74,
+    "center_offset": 0.05
   },
   {
-    "blur": 228.60982946668855,
+    "image": "Screenshot 2026-07-01 at 6.09.26\u202fPM.png",
+    "image_path": "/Users/suveer/few_shot/images/Screenshot 2026-07-01 at 6.09.26\u202fPM.png",
+    "blur": 228.60982946668852,
     "brightness": 216.41467159039044,
     "contrast": 66.8441370039579,
-    "noise": 3.7728419303894043,
+    "noise": 3.7728424072265625,
     "resolution": "626x616",
-    "recommendations": [
-      "Small Rotation",
-      "Horizontal Flip",
-      "Decrease Brightness"
-    ],
+    "recommendations": [],
     "background": "Simple",
     "lighting": "Bright",
-    "object_coverage": 98.72,
+    "object_coverage": 74.84,
     "orientation": 0.0,
-    "aspect_ratio": 1.01,
-    "center_offset": 0.4,
-    "image_name": "Screenshot 2026-07-01 at 6.09.26\u202fPM.png"
+    "aspect_ratio": 0.99,
+    "center_offset": 0.4
   },
   {
-    "blur": 442.7744402698617,
+    "image": "Screenshot 2026-07-01 at 6.09.34\u202fPM.png",
+    "image_path": "/Users/suveer/few_shot/images/Screenshot 2026-07-01 at 6.09.34\u202fPM.png",
+    "blur": 442.7744402698618,
     "brightness": 132.3593353726166,
-    "contrast": 112.4673585735638,
-    "noise": 5.0389485359191895,
+    "contrast": 112.46735857356381,
+    "noise": 5.038948059082031,
     "resolution": "802x706",
-    "recommendations": [
-      "Small Rotation",
-      "Horizontal Flip"
-    ],
+    "recommendations": [],
     "background": "Simple",
     "lighting": "Normal",
-    "object_coverage": 59.05,
+    "object_coverage": 54.84,
     "orientation": 0.0,
     "aspect_ratio": 0.88,
-    "center_offset": 12.77,
-    "image_name": "Screenshot 2026-07-01 at 6.09.34\u202fPM.png"
+    "center_offset": 0.07
   }
 ]

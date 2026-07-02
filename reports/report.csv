@@ -1,5 +1,5 @@
-blur,brightness,contrast,noise,resolution,recommendations,background,lighting,object_coverage,orientation,aspect_ratio,center_offset,image_name
-869.9545620061087,242.619255372341,50.54120152729043,6.9850116,788x934,"['Small Rotation', 'Horizontal Flip', 'Decrease Brightness']",Moderate,Bright,99.19,0.0,0.84,0.17,Screenshot 2026-07-01 at 6.08.56 PM.png
-765.5727181835218,98.75020737410289,107.8278699166434,6.4590297,1158x862,"['Small Rotation', 'Horizontal Flip']",Simple,Normal,38.39,0.0,1.0,1.05,Screenshot 2026-07-01 at 6.09.21 PM.png
-228.60982946668855,216.41467159039044,66.8441370039579,3.772842,626x616,"['Small Rotation', 'Horizontal Flip', 'Decrease Brightness']",Simple,Bright,98.72,0.0,1.01,0.4,Screenshot 2026-07-01 at 6.09.26 PM.png
-442.7744402698617,132.3593353726166,112.4673585735638,5.0389485,802x706,"['Small Rotation', 'Horizontal Flip']",Simple,Normal,59.05,0.0,0.88,12.77,Screenshot 2026-07-01 at 6.09.34 PM.png
+image,image_path,blur,brightness,contrast,noise,resolution,recommendations,background,lighting,object_coverage,orientation,aspect_ratio,center_offset
+Screenshot 2026-07-01 at 6.08.56 PM.png,/Users/suveer/few_shot/images/Screenshot 2026-07-01 at 6.08.56 PM.png,869.9545620061087,242.619255372341,50.54120152729045,6.985011100769043,788x934,,Simple,Bright,94.78,-90.0,1.18,0.17
+Screenshot 2026-07-01 at 6.09.21 PM.png,/Users/suveer/few_shot/images/Screenshot 2026-07-01 at 6.09.21 PM.png,765.572718183522,98.75020737410289,107.82786991664337,6.459029674530029,1158x862,,Simple,Normal,67.19,0.0,0.74,0.05
+Screenshot 2026-07-01 at 6.09.26 PM.png,/Users/suveer/few_shot/images/Screenshot 2026-07-01 at 6.09.26 PM.png,228.60982946668852,216.41467159039044,66.8441370039579,3.7728424072265625,626x616,,Simple,Bright,74.84,0.0,0.99,0.4
+Screenshot 2026-07-01 at 6.09.34 PM.png,/Users/suveer/few_shot/images/Screenshot 2026-07-01 at 6.09.34 PM.png,442.7744402698618,132.3593353726166,112.46735857356381,5.038948059082031,802x706,,Simple,Normal,54.84,0.0,0.88,0.07
