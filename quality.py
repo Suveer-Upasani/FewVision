@@ -230,7 +230,7 @@ class ImageQualityChecker:
         print(f"Quality Score  : {m.quality_score:.1f} / 100  [{m.quality_rating}]")
         print("\nRecommended:")
         for r in m.recommendations:
-            print(f"  ✓ {r}")
+            print(f"  [OK] {r}")
         print()
 
 

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FewVision Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="background-gradients">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+    </div>
+
+    <main class="dashboard">
+        <header class="hero">
+            <h1>FewVision</h1>
+            <p>Dynamic Few-Shot Learning for Manufacturing Defect Detection</p>
+        </header>
+
+        <!-- TRAINING SECTION -->
+        <section class="upload-section" id="trainSection">
+            <h2 class="section-title">1. Train on New Object</h2>
+            <div id="dropzoneTrain" class="dropzone">
+                <div class="drop-content">
+                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <h3>Upload Support Set (PASS & DEFECT images)</h3>
+                    <p>Select multiple images to train the model from scratch</p>
+                </div>
+                <input type="file" id="fileInputTrain" accept="image/*" multiple style="display: none;">
+            </div>
+            
+            <div id="loadingTrain" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Augmenting dataset & Training Prototypical Network... (This may take a minute)</p>
+            </div>
+            <div id="trainSuccess" class="success-message hidden">
+                <p>✅ Model successfully trained on new object!</p>
+            </div>
+        </section>
+
+        <!-- TESTING SECTION -->
+        <section class="upload-section" id="testSection" style="margin-top: 40px;">
+            <h2 class="section-title">2. Test Single Image</h2>
+            <div id="dropzone" class="dropzone">
+                <div class="drop-content">
+                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <h3>Test an Image</h3>
+                    <p>Drag & Drop a single image to test against the trained model</p>
+                </div>
+                <input type="file" id="fileInput" accept="image/*" style="display: none;">
+            </div>
+            
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Analyzing quality & generating predictions...</p>
+            </div>
+        </section>
+
+        <section id="results" class="results-section hidden">
+            <div class="results-grid">
+                
+                <!-- Prediction Card -->
+                <div class="glass-card prediction-card">
+                    <h2>AI Verdict</h2>
+                    <div class="verdict-container" id="verdictContainer">
+                        <h1 id="mlPrediction" class="verdict-text">PASS</h1>
+                        <p class="confidence">Confidence: <span id="mlConfidence">100</span>%</p>
+                    </div>
+                </div>
+
+                <!-- Metrics Card -->
+                <div class="glass-card metrics-card">
+                    <h2>Image Quality & Content</h2>
+                    <div class="metric-row">
+                        <span class="label">Suitability Rating</span>
+                        <span class="value highlight" id="suitabilityRating">Ready</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Quality Score</span>
+                        <div class="bar-container"><div class="bar" id="barQuality"></div></div>
+                        <span class="value" id="qualityScore">85</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Content Score</span>
+                        <div class="bar-container"><div class="bar" id="barContent"></div></div>
+                        <span class="value" id="contentScore">80</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Blur Factor</span>
+                        <span class="value" id="blurValue">210.5</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Noise (MAD)</span>
+                        <span class="value" id="noiseValue">0.5</span>
+                    </div>
+                </div>
+
+                <!-- Report Heatmap Card -->
+                <div class="glass-card report-card">
+                    <h2>Sharpness Heatmap</h2>
+                    <div class="image-container">
+                        <img id="reportImage" src="" alt="Heatmap Report">
+                    </div>
+                </div>
+
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

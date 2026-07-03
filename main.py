@@ -128,7 +128,7 @@ def process_folder(folder_path: str) -> None:
             # Generate per-image report
             report_path = generate_image_report(result, REPORTS_DIR)
             print(
-                f"✓  Quality={result.quality.quality_score:.0f}  "
+                f"[OK]  Quality={result.quality.quality_score:.0f}  "
                 f"Content={result.content.content_score:.0f}  "
                 f"Suit={result.suitability_score:.0f} [{result.suitability_rating}]"
             )
@@ -141,7 +141,7 @@ def process_folder(folder_path: str) -> None:
                 result.suitability_rating,
             )
         except Exception as exc:
-            print(f"✗  Error: {exc}")
+            print(f"[X]  Error: {exc}")
             logger.error("FAIL  %s  %s", img_path, exc, exc_info=True)
 
     # Write CSV + JSON
@@ -161,13 +161,19 @@ def process_folder(folder_path: str) -> None:
     # Member 1 Task: Adaptive Augmentation
     print("\nStarting Adaptive Augmentation batch generation...")
     from augmentations import generate_batch
+    import shutil
+    
     aug_dir = os.path.join(os.getcwd(), "augmented_dataset")
+    if os.path.exists(aug_dir):
+        shutil.rmtree(aug_dir)
+    os.makedirs(aug_dir, exist_ok=True)
+    
     for r in results:
         img_path = r.image_path
         try:
             generate_batch(img_path, output_dir=aug_dir, num_images=10)
         except Exception as e:
-            print(f"✗  Augmentation failed for {img_path}: {e}")
+            print(f"[X]  Augmentation failed for {img_path}: {e}")
     print(f"Augmented dataset saved to: {aug_dir}")
 
     # Member 2 Task: Feature Extraction
@@ -176,9 +182,9 @@ def process_folder(folder_path: str) -> None:
         from feature_extraction import run as extract_features_run
         extract_features_run(image_dir=aug_dir)
     except ImportError:
-        print("✗  torch/torchvision not installed. Run: pip install torch torchvision")
+        print("[X]  torch/torchvision not installed. Run: pip install torch torchvision")
     except Exception as e:
-        print(f"✗  Feature extraction failed: {e}")
+        print(f"[X]  Feature extraction failed: {e}")
 
     # Member 3 Task: Few-Shot Classification
     print("\nPrototypical Network classifier...")
@@ -186,7 +192,7 @@ def process_folder(folder_path: str) -> None:
         from few_shot_model import run as few_shot_run
         few_shot_run()
     except Exception as e:
-        print(f"✗  Few-shot classification failed: {e}")
+        print(f"[X]  Few-shot classification failed: {e}")
 
     print(f"\nAll reports written to ./{REPORTS_DIR}/")
 
