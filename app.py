@@ -115,11 +115,22 @@ def train():
     os.makedirs(train_dir, exist_ok=True)
     
     try:
-        # Save all uploaded training files
+        # Save all uploaded training files preserving class folders
         for file in files:
             if file:
-                filename = secure_filename(file.filename)
-                file.save(os.path.join(train_dir, filename))
+                rel_path = file.filename.replace('\\', '/')
+                parts = rel_path.split('/')
+                
+                if len(parts) > 1 and parts[-2] in {"PASS", "DEFECT"}:
+                    class_label = parts[-2]
+                    sub_filename = secure_filename(parts[-1])
+                    dest_dir = os.path.join(train_dir, class_label)
+                    os.makedirs(dest_dir, exist_ok=True)
+                    file.save(os.path.join(dest_dir, sub_filename))
+                else:
+                    # Save flat if no subfolder layout detected
+                    sub_filename = secure_filename(parts[-1])
+                    file.save(os.path.join(train_dir, sub_filename))
         
         # Trigger the entire main pipeline (Quality -> Augment -> Extract -> Prototypical Network)
         # on the newly uploaded training directory. This will overwrite prototypes.npy with the new object!

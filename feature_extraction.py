@@ -81,13 +81,35 @@ def extract_features(image_dir: str) -> tuple:
     Returns
     -------
     features : np.ndarray, shape [N, 2048]
-    labels   : list of str (filenames)
+    labels   : list of str (filenames or class names)
     """
     valid_ext = {".jpg", ".jpeg", ".png", ".bmp"}
-    image_paths = sorted([
-        p for p in Path(image_dir).iterdir()
-        if p.suffix.lower() in valid_ext
-    ])
+    image_paths = []
+    labels = []
+
+    classes = ["PASS", "DEFECT"]
+    has_subfolders = any(os.path.isdir(os.path.join(image_dir, cls)) for cls in classes)
+
+    if has_subfolders:
+        for cls in classes:
+            cls_dir = os.path.join(image_dir, cls)
+            if os.path.isdir(cls_dir):
+                paths = sorted([
+                    p for p in Path(cls_dir).iterdir()
+                    if p.suffix.lower() in valid_ext
+                ])
+                for p in paths:
+                    image_paths.append(p)
+                    labels.append(cls)
+    else:
+        # Fallback to scanning single flat folder (backward compatibility)
+        paths = sorted([
+            p for p in Path(image_dir).iterdir()
+            if p.suffix.lower() in valid_ext
+        ])
+        for p in paths:
+            image_paths.append(p)
+            labels.append(p.name)
 
     if not image_paths:
         raise FileNotFoundError(f"No images found in: {image_dir}")
@@ -108,7 +130,7 @@ def extract_features(image_dir: str) -> tuple:
                 # Forward pass through backbone — output shape: [1, 2048]
                 embedding = backbone(tensor)
                 all_features.append(embedding.squeeze(0).cpu().numpy())
-                all_labels.append(img_path.name)
+                all_labels.append(labels[i-1])
 
                 if i % 10 == 0 or i == len(image_paths):
                     print(f"  {i}/{len(image_paths)} images processed...")  

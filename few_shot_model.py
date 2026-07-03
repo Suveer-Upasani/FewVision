@@ -57,6 +57,8 @@ def infer_class_from_filename(filename: str) -> str:
     
     You can extend this list to match your specific dataset naming convention.
     """
+    if filename in {"PASS", "DEFECT"}:
+        return filename
     name_lower = filename.lower()
     defect_keywords = ["blur", "dark", "noise", "defect", "bad", "broken", "damaged"]
     for kw in defect_keywords:
