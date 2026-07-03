@@ -156,6 +156,13 @@ def process_folder(folder_path: str):
             print("[WARN] torch/torchvision not installed. Run: pip install torch torchvision")
         except Exception as e:
             print(f"[WARN] Feature extraction failed: {e}")
+
+        # Few-Shot Classification: Prototypical Network classifier
+        try:
+            from few_shot_model import run as few_shot_run
+            few_shot_run()
+        except Exception as e:
+            print(f"[WARN] Few-shot classification failed: {e}")
         
     else:
         print("⚠️ No supported images found – nothing to report.")
