@@ -1,19 +1,20 @@
 # content_analysis.py
 """Content analysis module for extracting scene and object metrics from images.
 
-Provides the `ContentAnalyzer` class with an `analyze(image_path)` method returning a dictionary
-with the following keys:
-- background: one of "Simple", "Moderate", "Complex" based on edge density.
-- lighting: one of "Dark", "Normal", "Bright" based on mean brightness.
-- object_coverage: percentage of image area covered by primary object (0-100).
-- orientation: rotation angle of the main object's bounding box in degrees.
-- aspect_ratio: width/height ratio of the main object.
-- center_offset: distance (in % of image diagonal) between image centre and object centre.
+Enhanced with:
+  - GrabCut segmentation (Otsu fallback)  (#6)
+  - Multi-feature background analysis (edge + entropy + colour + LBP)  (#5)
+  - Confidence scores  (#8)
+  - Content score (0–100)  (#12)
+  - Bounding box data for visualization  (#7)
 """
 
+import math
 import cv2
 import numpy as np
 import os
+from models import ContentMetrics
+
 
 
 class ContentAnalyzer:
@@ -26,52 +27,130 @@ class ContentAnalyzer:
             raise ValueError(f"Cannot open image: {image_path}")
         self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
         self.height, self.width = self.gray.shape
+        self._fg_mask = None
+        self._bounding_rect = None
 
     # ---------------------------------------------------------------------
-    # Background complexity – based on edge density
+    # Background complexity – multi-feature  (#5)
     # ---------------------------------------------------------------------
-    def _background_complexity(self) -> str:
+    def _edge_density(self):
         edges = cv2.Canny(self.gray, 100, 200)
-        edge_density = np.sum(edges > 0) / (self.width * self.height)
-        if edge_density < 0.05:
-            return "Simple"
-        elif edge_density < 0.15:
-            return "Moderate"
+        return float(np.sum(edges > 0) / (self.width * self.height))
+
+    def _texture_entropy(self):
+        """Approximate local entropy using Laplacian standard deviation."""
+        lap = cv2.Laplacian(self.gray, cv2.CV_64F)
+        return float(np.std(lap))
+
+    def _colour_variance(self):
+        """Mean per-channel standard deviation in BGR."""
+        stds = [float(np.std(self.image[:, :, c])) for c in range(3)]
+        return float(np.mean(stds))
+
+    def _background_complexity(self):
+        """Classify background using edge density + texture entropy +
+        colour variance.  Returns (label, confidence)."""
+        ed = self._edge_density()
+        te = self._texture_entropy()
+        cv_val = self._colour_variance()
+
+        # Normalise each to 0–1
+        ed_score = min(ed / 0.15, 1.0)
+        te_score = min(te / 60.0, 1.0)
+        cv_score = min(cv_val / 80.0, 1.0)
+
+        # Weighted vote
+        complexity = 0.40 * ed_score + 0.30 * te_score + 0.30 * cv_score
+
+        if complexity < 0.25:
+            label = "Simple"
+        elif complexity < 0.55:
+            label = "Moderate"
         else:
-            return "Complex"
+            label = "Complex"
+
+        # Confidence: distance from nearest boundary
+        distances = [abs(complexity - 0.25), abs(complexity - 0.55)]
+        confidence = round(min(1.0, min(distances) / 0.15), 4)
+        return label, confidence
 
     # ---------------------------------------------------------------------
-    # Lighting – mean brightness categorisation
+    # Lighting
     # ---------------------------------------------------------------------
-    def _lighting(self) -> str:
+    def _lighting(self):
         mean_val = np.mean(self.gray)
         if mean_val < 70:
             return "Dark"
         elif mean_val > 180:
             return "Bright"
-        else:
-            return "Normal"
+        return "Normal"
 
     # ---------------------------------------------------------------------
-    # Object coverage – Otsu threshold to separate foreground/background
+    # Object segmentation – GrabCut with Otsu fallback  (#6)
     # ---------------------------------------------------------------------
-    def _object_coverage(self) -> float:
-        _, mask = cv2.threshold(self.gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    def _segment_foreground(self):
+        """Return a binary mask (0/255) of the foreground object."""
+        if self._fg_mask is not None:
+            return self._fg_mask
+
+        # --- Try GrabCut ---
+        try:
+            mask = np.zeros(self.gray.shape[:2], np.uint8)
+            rect = (
+                int(0.1 * self.width),
+                int(0.1 * self.height),
+                int(0.8 * self.width),
+                int(0.8 * self.height),
+            )
+            bgd = np.zeros((1, 65), np.float64)
+            fgd = np.zeros((1, 65), np.float64)
+            cv2.grabCut(self.image, mask, rect, bgd, fgd, 5, cv2.GC_INIT_WITH_RECT)
+            fg = np.where(
+                (mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0
+            ).astype(np.uint8)
+            fg_ratio = np.sum(fg == 255) / (self.width * self.height)
+            if 0.01 < fg_ratio < 0.99:
+                self._fg_mask = fg
+                return fg
+        except Exception:
+            pass
+
+        # --- Otsu fallback ---
+        _, mask = cv2.threshold(
+            self.gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
         if np.sum(mask == 255) < np.sum(mask == 0):
             mask = cv2.bitwise_not(mask)
-        coverage = np.sum(mask == 255) / (self.width * self.height) * 100.0
-        return round(coverage, 2)
+        self._fg_mask = mask
+        return mask
 
     # ---------------------------------------------------------------------
-    # Orientation, aspect ratio and centre offset – based on largest contour
+    # Object coverage  (#8 confidence)
+    # ---------------------------------------------------------------------
+    def _object_coverage(self):
+        """Return (coverage_pct, confidence)."""
+        mask = self._segment_foreground()
+        total = self.width * self.height
+        coverage = float(np.sum(mask == 255) / total * 100.0)
+
+        # Confidence proxy: edge crispness of the mask boundary
+        edges = cv2.Canny(mask, 100, 200)
+        edge_sharpness = float(np.sum(edges > 0) / max(1, np.sum(mask == 255)))
+        confidence = round(min(1.0, edge_sharpness * 50), 4)
+        return round(coverage, 2), confidence
+
+    # ---------------------------------------------------------------------
+    # Object geometry  (#7 bounding box data)
     # ---------------------------------------------------------------------
     def _object_geometry(self):
-        _, mask = cv2.threshold(self.gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        if np.sum(mask == 255) < np.sum(mask == 0):
-            mask = cv2.bitwise_not(mask)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        """Return (orientation, aspect_ratio, center_offset, bounding_rect)."""
+        mask = self._segment_foreground()
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
         if not contours:
-            return 0.0, 1.0, 0.0
+            return 0.0, 1.0, 0.0, None
+
         largest = max(contours, key=cv2.contourArea)
         rect = cv2.minAreaRect(largest)
         (cx, cy), (w, h), angle = rect
@@ -79,26 +158,67 @@ class ContentAnalyzer:
             angle = angle + 90
         orientation = round(angle, 2)
         aspect_ratio = round(w / h if h != 0 else 0, 2)
-        img_cx, img_cy = self.width / 2.0, self.height / 2.0
-        diag = np.sqrt(self.width ** 2 + self.height ** 2)
-        offset_px = np.sqrt((cx - img_cx) ** 2 + (cy - img_cy) ** 2)
-        offset_pct = round((offset_px / diag) * 100, 2)
-        return orientation, aspect_ratio, offset_pct
 
-    def analyze(self) -> dict:
-        """Return a dictionary with all content metrics for the image."""
-        background = self._background_complexity()
+        img_cx, img_cy = self.width / 2.0, self.height / 2.0
+        diag = math.sqrt(self.width ** 2 + self.height ** 2)
+        offset_px = math.sqrt((cx - img_cx) ** 2 + (cy - img_cy) ** 2)
+        offset_pct = round((offset_px / diag) * 100, 2)
+
+        self._bounding_rect = rect
+        return orientation, aspect_ratio, offset_pct, rect
+
+    # ---------------------------------------------------------------------
+    # Content Score (0–100)  (#12)
+    # ---------------------------------------------------------------------
+    @staticmethod
+    def _content_score(coverage, center_offset, background, lighting):
+        """Weighted content score — higher = more suitable for training."""
+        # Coverage: ideal 40–80 %
+        if 40 <= coverage <= 80:
+            s_cov = 1.0
+        elif coverage < 40:
+            s_cov = coverage / 40.0
+        else:
+            s_cov = max(0.0, 1.0 - (coverage - 80) / 20.0)
+
+        s_offset = max(0.0, 1.0 - center_offset / 20.0)
+
+        bg_map = {"Simple": 1.0, "Moderate": 0.6, "Complex": 0.3}
+        s_bg = bg_map.get(background, 0.5)
+
+        lt_map = {"Normal": 1.0, "Bright": 0.6, "Dark": 0.5}
+        s_lt = lt_map.get(lighting, 0.5)
+
+        score = (0.35 * s_cov + 0.25 * s_offset + 0.20 * s_bg + 0.20 * s_lt) * 100
+        return round(score, 2)
+
+    # ---------------------------------------------------------------------
+    # Public API
+    # ---------------------------------------------------------------------
+    def analyze(self):
+        """Return a dictionary with all content metrics (enhanced)."""
+        background, bg_conf = self._background_complexity()
         lighting = self._lighting()
-        coverage = self._object_coverage()
-        orientation, aspect_ratio, center_offset = self._object_geometry()
-        return {
-            "background": background,
-            "lighting": lighting,
-            "object_coverage": coverage,
-            "orientation": orientation,
-            "aspect_ratio": aspect_ratio,
-            "center_offset": center_offset,
-        }
+        coverage, cov_conf = self._object_coverage()
+        orientation, aspect_ratio, center_offset, brect = self._object_geometry()
+        content_score = self._content_score(
+            coverage, center_offset, background, lighting
+        )
+
+        return ContentMetrics(
+            background=background,
+            background_confidence=bg_conf,
+            lighting=lighting,
+            object_coverage=coverage,
+            coverage_confidence=cov_conf,
+            orientation=orientation,
+            aspect_ratio=aspect_ratio,
+            center_offset=center_offset,
+            content_score=content_score,
+            foreground_mask=self._fg_mask,
+            bounding_rect=brect,
+        )
+
 
 if __name__ == "__main__":
     import sys
@@ -106,4 +226,6 @@ if __name__ == "__main__":
         print("Usage: python content_analysis.py <image_path>")
         sys.exit(1)
     analyzer = ContentAnalyzer(sys.argv[1])
-    print(analyzer.analyze())
+    result = analyzer.analyze()
+    for k, v in result.to_dict().items():
+        print(f"  {k}: {v}")

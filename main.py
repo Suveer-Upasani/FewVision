@@ -1,147 +1,179 @@
 #!/usr/bin/env python3
-"""Main entry point for the modular computer‑vision pipeline.
+"""FewVision Pipeline — Main Orchestrator.
 
-The script walks through an image folder, runs the quality checker and the
-content analyzer on each image, and writes the combined results to CSV and JSON
-reports under the ``reports`` directory.
+Thin entry point that delegates to specialised modules:
+  1. quality.py               → Image quality analysis
+  2. content_analysis.py      → Content & scene analysis
+  3. adaptive_augmentation.py  → Augmentation decision engine
+  4. report_generator.py      → Per-image visual reports
+  5. dataset_analyzer.py      → Dataset-level analytics
 """
 
 import os
-import json
 import csv
-import numpy as np
-import matplotlib.pyplot as plt
+import json
+import logging
+from models import AnalysisResult
 from quality import ImageQualityChecker
 from content_analysis import ContentAnalyzer
-import cv2
+from adaptive_augmentation import decide_augmentations
+from report_generator import generate_image_report
+from dataset_analyzer import analyze_dataset
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
 REPORTS_DIR = "reports"
+LOG_DIR = "logs"
+VALID_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+os.makedirs(LOG_DIR, exist_ok=True)
+logging.basicConfig(
+    filename=os.path.join(LOG_DIR, "pipeline.log"),
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-8s  %(message)s",
+)
+logger = logging.getLogger("fewvision")
 
 
-def ensure_reports_dir():
+# ---------------------------------------------------------------------------
+# Suitability score (#12)
+# ---------------------------------------------------------------------------
+def _suitability(quality_score: float, content_score: float) -> tuple[float, str]:
+    """Compute combined suitability score and rating."""
+    score = round(0.5 * quality_score + 0.5 * content_score, 2)
+    if score >= 75:
+        rating = "Ready"
+    elif score >= 50:
+        rating = "Marginal"
+    else:
+        rating = "Unsuitable"
+    return score, rating
+
+
+# ---------------------------------------------------------------------------
+# Per-image processing
+# ---------------------------------------------------------------------------
+def process_image(image_path: str) -> AnalysisResult:
+    """Run quality + content analysis, compute suitability, decide augmentations."""
+    logger.info("Processing %s", image_path)
+
+    q = ImageQualityChecker(image_path).analyze()
+    c = ContentAnalyzer(image_path).analyze()
+
+    suit_score, suit_rating = _suitability(q.quality_score, c.content_score)
+    augs = decide_augmentations(q, c, suitability_score=suit_score)
+
+    return AnalysisResult(
+        image=os.path.basename(image_path),
+        image_path=image_path,
+        quality=q,
+        content=c,
+        suitability_score=suit_score,
+        suitability_rating=suit_rating,
+        augmentations=augs,
+    )
+
+
+# ---------------------------------------------------------------------------
+# CSV / JSON export
+# ---------------------------------------------------------------------------
+def _write_csv(results: list[AnalysisResult], path: str) -> None:
+    if not results:
+        return
+    rows = [r.to_flat_dict() for r in results]
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+    logger.info("CSV written to %s", path)
+
+
+def _write_json(results: list[AnalysisResult], path: str) -> None:
+    rows = [r.to_flat_dict() for r in results]
+    with open(path, "w") as f:
+        json.dump(rows, f, indent=2, default=str)
+    logger.info("JSON written to %s", path)
+
+
+# ---------------------------------------------------------------------------
+# Folder processing
+# ---------------------------------------------------------------------------
+def process_folder(folder_path: str) -> None:
+    """Process every supported image in *folder_path*."""
     os.makedirs(REPORTS_DIR, exist_ok=True)
 
+    image_paths = sorted(
+        os.path.join(folder_path, f)
+        for f in os.listdir(folder_path)
+        if os.path.splitext(f)[1].lower() in VALID_EXT
+    )
 
-def process_image(image_path: str) -> dict:
-    """Run both quality and content analysis and merge their results.
-
-    Returns a dictionary that can be written directly to CSV/JSON.
-    """
-    # Quality metrics
-    quality = ImageQualityChecker(image_path)
-    q_dict = quality.analyze()
-
-    # Content metrics
-    content = ContentAnalyzer(image_path)
-    c_dict = content.analyze()
-
-    # Recommendations placeholder (can be extended later)
-    merged = {
-        "image": os.path.basename(image_path),
-        "image_path": image_path,
-        **q_dict,
-        **c_dict,
-        "recommendations": [],
-    }
-    return merged
-
-
-def write_reports(results: list[dict]):
-    """Generate a visual analyzed image report for each processed image."""
-    ensure_reports_dir()
-
-    if not results:
-        print("No results to generate report.")
+    if not image_paths:
+        print("No supported images found.")
+        logger.warning("No images found in %s", folder_path)
         return
 
-    for r in results:
-        img_path = r.get("image_path")
-        img_name = r.get("image")
-        
-        # Read the image
-        img = cv2.imread(img_path)
-        if img is None:
-            print(f"Could not read {img_path} for report generation.")
-            continue
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        
-        # Create a heatmap-like visual (Gradient magnitude for blur/edges)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-        magnitude = cv2.magnitude(sobelx, sobely)
-        magnitude = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-        
-        fig = plt.figure(figsize=(14, 7))
-        fig.patch.set_facecolor('#f4f4f9')
-        
-        # Original Image
-        ax1 = fig.add_subplot(1, 2, 1)
-        ax1.imshow(img_rgb)
-        ax1.set_title("Analyzed Product Image", fontsize=16, weight='bold')
-        ax1.axis('off')
-        
-        # Heatmap
-        ax2 = fig.add_subplot(1, 2, 2)
-        im = ax2.imshow(magnitude, cmap='inferno')
-        ax2.set_title("Sharpness / Edge Heatmap", fontsize=16, weight='bold')
-        ax2.axis('off')
-        
-        # Add a text box with the stats on the left image
-        recs = r.get("recommendations", [])
-        status = "DEFECT ❌" if recs else "PASS ✅"
-        color = "#ffebee" if recs else "#e8f5e9" # light red or green background
-        edge_color = "red" if recs else "green"
-        
-        # Extract scalar values if they are arrays
-        def get_val(key):
-            v = r.get(key, 0)
-            return float(np.mean(v)) if isinstance(v, (list, tuple, np.ndarray)) else float(v)
+    results: list[AnalysisResult] = []
 
-        stats_text = (
-            f"STATUS: {status}\n"
-            f"{'-'*30}\n"
-            f"Blur: {get_val('blur'):.1f}\n"
-            f"Contrast: {get_val('contrast'):.1f}\n"
-            f"Brightness: {get_val('brightness'):.1f}\n"
-            f"Noise: {get_val('noise'):.1f}\n"
-        )
-        if recs:
-            notes = ", ".join(recs) if isinstance(recs, list) else str(recs)
-            stats_text += f"\nIssues Detected:\n{notes}"
-            
-        props = dict(boxstyle='round,pad=1', facecolor=color, alpha=0.9, edgecolor=edge_color, linewidth=2)
-        ax1.text(0.03, 0.97, stats_text, transform=ax1.transAxes, fontsize=12,
-                verticalalignment='top', bbox=props, color='black', weight='bold', family='monospace')
+    for idx, img_path in enumerate(image_paths, 1):
+        try:
+            print(f"[{idx}/{len(image_paths)}] Analysing {os.path.basename(img_path)} ...", end=" ")
+            result = process_image(img_path)
+            results.append(result)
 
-        plt.tight_layout()
-        out_name = f"analyzed_{img_name}"
-        out_path = os.path.join(REPORTS_DIR, out_name)
-        plt.savefig(out_path, dpi=200, bbox_inches='tight')
-        plt.close(fig)
-        
-    print(f"Analyzed report images written to ./{REPORTS_DIR}/")
+            # Generate per-image report
+            report_path = generate_image_report(result, REPORTS_DIR)
+            print(
+                f"✓  Quality={result.quality.quality_score:.0f}  "
+                f"Content={result.content.content_score:.0f}  "
+                f"Suit={result.suitability_score:.0f} [{result.suitability_rating}]"
+            )
+            logger.info(
+                "OK  %s  quality=%.1f  content=%.1f  suit=%.1f  [%s]",
+                result.image,
+                result.quality.quality_score,
+                result.content.content_score,
+                result.suitability_score,
+                result.suitability_rating,
+            )
+        except Exception as exc:
+            print(f"✗  Error: {exc}")
+            logger.error("FAIL  %s  %s", img_path, exc, exc_info=True)
 
+    # Write CSV + JSON
+    _write_csv(results, os.path.join(REPORTS_DIR, "report.csv"))
+    _write_json(results, os.path.join(REPORTS_DIR, "report.json"))
 
-def process_folder(folder_path: str):
-    """Iterate over supported image files in *folder_path* and generate reports."""
-    valid_ext = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
-    results = []
-    for fname in sorted(os.listdir(folder_path)):
-        if os.path.splitext(fname)[1].lower() in valid_ext:
-            img_path = os.path.join(folder_path, fname)
-            try:
-                results.append(process_image(img_path))
-            except Exception as exc:
-                print(f"[WARN] Failed processing {fname}: {exc}")
+    # Dataset-level analytics
     if results:
-        write_reports(results)
-    else:
-        print("⚠️ No supported images found – nothing to report.")
+        analytics = analyze_dataset(results, REPORTS_DIR)
+        print(f"Distribution plot : {analytics['distribution_plot']}")
+        print(f"Duplicates CSV    : {analytics['duplicates_csv']}")
+        print(f"Embedding preview : {analytics['embedding_plot']}")
 
+    print(f"\nAll reports written to ./{REPORTS_DIR}/")
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    import sys
+
     default = os.path.join(os.getcwd(), "images")
-    folder = input(f"Enter dataset folder path (default {default}): ").strip() or default
+
+    if len(sys.argv) > 1:
+        # Path provided as CLI argument:  python main.py /path/to/images
+        folder = sys.argv[1]
+    else:
+        # Interactive prompt (press Enter for default)
+        folder = input(f"Enter dataset folder path (default {default}): ").strip() or default
+
     if not os.path.isdir(folder):
-        print(f"❌ Folder does not exist: {folder}")
+        print(f"Folder does not exist: {folder}")
     else:
         process_folder(folder)
