@@ -1,7 +1,7 @@
 [
   {
-    "image": "Screenshot 2026-07-01 at 6.08.56 PM.png",
-    "image_path": "C:\\Users\\khush\\Desktop\\FewVision\\FewVision\\images\\Screenshot 2026-07-01 at 6.08.56 PM.png",
+    "image": "Screenshot_2026-07-01_at_6.08.56_PM.png",
+    "image_path": "uploads/train_set/Screenshot_2026-07-01_at_6.08.56_PM.png",
     "blur": 869.95,
     "brightness": 242.62,
     "contrast": 50.54,
@@ -17,19 +17,19 @@
     "background": "Moderate",
     "background_confidence": 0.9652,
     "lighting": "Bright",
-    "object_coverage": 2.64,
+    "object_coverage": 3.88,
     "coverage_confidence": 1.0,
-    "orientation": -0.24,
-    "aspect_ratio": 2.18,
-    "center_offset": 9.22,
-    "content_score": 39.78,
-    "suitability_score": 51.74,
+    "orientation": 0.0,
+    "aspect_ratio": 0.95,
+    "center_offset": 6.1,
+    "content_score": 44.77,
+    "suitability_score": 54.23,
     "suitability_rating": "Marginal",
     "augmentations": "brightness_down, sharpen, horizontal_flip, center_crop"
   },
   {
-    "image": "Screenshot 2026-07-01 at 6.09.21 PM.png",
-    "image_path": "C:\\Users\\khush\\Desktop\\FewVision\\FewVision\\images\\Screenshot 2026-07-01 at 6.09.21 PM.png",
+    "image": "Screenshot_2026-07-01_at_6.09.21_PM.png",
+    "image_path": "uploads/train_set/Screenshot_2026-07-01_at_6.09.21_PM.png",
     "blur": 765.57,
     "brightness": 98.75,
     "contrast": 107.83,
@@ -56,8 +56,8 @@
     "augmentations": "sharpen, rotate_small, horizontal_flip, brightness_up, brightness_down, vertical_flip, gaussian_noise, color_jitter"
   },
   {
-    "image": "Screenshot 2026-07-01 at 6.09.26 PM.png",
-    "image_path": "C:\\Users\\khush\\Desktop\\FewVision\\FewVision\\images\\Screenshot 2026-07-01 at 6.09.26 PM.png",
+    "image": "Screenshot_2026-07-01_at_6.09.26_PM.png",
+    "image_path": "uploads/train_set/Screenshot_2026-07-01_at_6.09.26_PM.png",
     "blur": 228.61,
     "brightness": 216.41,
     "contrast": 66.84,
@@ -84,8 +84,8 @@
     "augmentations": "brightness_down, sharpen, rotate_small, horizontal_flip, center_crop, vertical_flip, gaussian_noise, color_jitter"
   },
   {
-    "image": "Screenshot 2026-07-01 at 6.09.34 PM.png",
-    "image_path": "C:\\Users\\khush\\Desktop\\FewVision\\FewVision\\images\\Screenshot 2026-07-01 at 6.09.34 PM.png",
+    "image": "Screenshot_2026-07-01_at_6.09.34_PM.png",
+    "image_path": "uploads/train_set/Screenshot_2026-07-01_at_6.09.34_PM.png",
     "blur": 442.77,
     "brightness": 132.36,
     "contrast": 112.47,
@@ -113,7 +113,7 @@
   },
   {
     "image": "image.png",
-    "image_path": "C:\\Users\\khush\\Desktop\\FewVision\\FewVision\\images\\image.png",
+    "image_path": "uploads/train_set/image.png",
     "blur": 181.07,
     "brightness": 109.6,
     "contrast": 76.99,
