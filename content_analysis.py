@@ -26,13 +26,52 @@ class ContentAnalyzer:
             raise ValueError(f"Cannot open image: {image_path}")
         self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
         self.height, self.width = self.gray.shape
+        
+        # Cache for efficiency so we don't calculate expensive masks twice
+        self._mask = None
+        self._largest_contour = None
+
+    def _get_object_mask_and_contour(self):
+        """Compute and cache the object mask and largest contour efficiently with morphological cleaning."""
+        if self._mask is not None and self._largest_contour is not None:
+            return self._mask, self._largest_contour
+
+        # 1. Apply Gaussian blur to remove high-frequency noise/grain before thresholding
+        blurred = cv2.GaussianBlur(self.gray, (5, 5), 0)
+        
+        # 2. Otsu's thresholding
+        _, mask = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        # Assume the object is smaller than the background. 
+        # If white pixels dominate (more than 50%), invert the mask to isolate the object.
+        if np.sum(mask == 255) > (self.width * self.height) / 2:
+            mask = cv2.bitwise_not(mask)
+            
+        # 3. Morphological Operations: Fill holes inside the object (shiny metal reflections) and remove tiny noise spots
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+
+        self._mask = mask
+
+        # Find largest contour
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            self._largest_contour = max(contours, key=cv2.contourArea)
+        else:
+            self._largest_contour = None
+
+        return self._mask, self._largest_contour
 
     # ---------------------------------------------------------------------
     # Background complexity – based on edge density
     # ---------------------------------------------------------------------
     def _background_complexity(self) -> str:
-        edges = cv2.Canny(self.gray, 100, 200)
+        # Blur first to ensure image grain/sensor noise isn't mistakenly counted as complex background edges
+        blurred = cv2.GaussianBlur(self.gray, (3, 3), 0)
+        edges = cv2.Canny(blurred, 50, 150)
         edge_density = np.sum(edges > 0) / (self.width * self.height)
+        
         if edge_density < 0.05:
             return "Simple"
         elif edge_density < 0.15:
@@ -53,36 +92,35 @@ class ContentAnalyzer:
             return "Normal"
 
     # ---------------------------------------------------------------------
-    # Object coverage – Otsu threshold to separate foreground/background
+    # Object coverage – Efficiently calculate from cached mask
     # ---------------------------------------------------------------------
     def _object_coverage(self) -> float:
-        _, mask = cv2.threshold(self.gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        if np.sum(mask == 255) < np.sum(mask == 0):
-            mask = cv2.bitwise_not(mask)
+        mask, _ = self._get_object_mask_and_contour()
         coverage = np.sum(mask == 255) / (self.width * self.height) * 100.0
         return round(coverage, 2)
 
     # ---------------------------------------------------------------------
-    # Orientation, aspect ratio and centre offset – based on largest contour
+    # Orientation, aspect ratio and centre offset – based on cached contour
     # ---------------------------------------------------------------------
     def _object_geometry(self):
-        _, mask = cv2.threshold(self.gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        if np.sum(mask == 255) < np.sum(mask == 0):
-            mask = cv2.bitwise_not(mask)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
+        _, largest_contour = self._get_object_mask_and_contour()
+        
+        if largest_contour is None:
             return 0.0, 1.0, 0.0
-        largest = max(contours, key=cv2.contourArea)
-        rect = cv2.minAreaRect(largest)
+            
+        rect = cv2.minAreaRect(largest_contour)
         (cx, cy), (w, h), angle = rect
         if w < h:
             angle = angle + 90
+            
         orientation = round(angle, 2)
         aspect_ratio = round(w / h if h != 0 else 0, 2)
+        
         img_cx, img_cy = self.width / 2.0, self.height / 2.0
         diag = np.sqrt(self.width ** 2 + self.height ** 2)
         offset_px = np.sqrt((cx - img_cx) ** 2 + (cy - img_cy) ** 2)
         offset_pct = round((offset_px / diag) * 100, 2)
+        
         return orientation, aspect_ratio, offset_pct
 
     def analyze(self) -> dict:

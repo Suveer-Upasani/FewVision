@@ -59,15 +59,13 @@ class ImageQualityChecker:
         bright = self.brightness()
         contrast = self.contrast()
 
-        if blur < 100:
+        if blur < 200:
             rec.append("Sharpen Image")
             avoid.append("Gaussian Blur")
-        else:
-            rec.extend(["Small Rotation", "Horizontal Flip"])
 
         if bright < 70:
             rec.append("Increase Brightness")
-        elif bright > 180:
+        elif bright > 230:
             rec.append("Decrease Brightness")
 
         if contrast < 40:

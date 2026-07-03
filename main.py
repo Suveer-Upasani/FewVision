@@ -34,14 +34,15 @@ def process_image(image_path: str) -> dict:
     content = ContentAnalyzer(image_path)
     c_dict = content.analyze()
 
-    # Recommendations placeholder (can be extended later)
     merged = {
         "image": os.path.basename(image_path),
         "image_path": image_path,
         **q_dict,
         **c_dict,
-        "recommendations": [],
     }
+    # Ensure recommendations exists if it wasn't in q_dict or c_dict
+    if "recommendations" not in merged:
+        merged["recommendations"] = []
     return merged
 
 
@@ -135,6 +136,27 @@ def process_folder(folder_path: str):
                 print(f"[WARN] Failed processing {fname}: {exc}")
     if results:
         write_reports(results)
+        
+        # Augmentation: generate 10 synthetic angle/lighting variants per image
+        from augmentations import generate_batch
+        aug_dir = os.path.join(os.getcwd(), "augmented_dataset")
+        for r in results:
+            img_path = r.get("image_path")
+            try:
+                generate_batch(img_path, output_dir=aug_dir, num_images=10)
+            except Exception as e:
+                print(f"[WARN] Augmentation failed for {img_path}: {e}")
+        print(f"Augmented dataset saved to: {aug_dir}")
+
+        # Feature Extraction: extract 2048-dim ResNet50 embeddings
+        try:
+            from feature_extraction import run as extract_features_run
+            extract_features_run(image_dir=aug_dir)
+        except ImportError:
+            print("[WARN] torch/torchvision not installed. Run: pip install torch torchvision")
+        except Exception as e:
+            print(f"[WARN] Feature extraction failed: {e}")
+        
     else:
         print("⚠️ No supported images found – nothing to report.")
 

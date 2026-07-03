@@ -63,3 +63,41 @@ def apply_augmentation(image_path: str, aug_name: str) -> np.ndarray:
         transform = _get_transform(aug_name)
     augmented = transform(image=img)
     return augmented["image"]
+
+
+def generate_batch(image_path: str, output_dir: str, num_images: int = 10) -> list:
+    """Generate a batch of augmented images to simulate different angles and conditions.
+    
+    This uses Albumentations to apply random spatial and lighting transformations.
+    """
+    import os
+    img = cv2.imread(image_path)
+    if img is None:
+        raise FileNotFoundError(f"Image not found: {image_path}")
+        
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Base spatial augmentation pipeline for varying camera angles
+    pipeline = A.Compose([
+        A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.2, rotate_limit=30, p=0.8),
+        A.Perspective(scale=(0.05, 0.1), p=0.5),
+        A.HorizontalFlip(p=0.5),
+        A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.7),
+        A.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=15, val_shift_limit=10, p=0.5),
+        A.GaussianBlur(blur_limit=(3, 5), p=0.2), # Occasional slight focus loss
+    ])
+    
+    base_name = os.path.splitext(os.path.basename(image_path))[0]
+    generated_paths = []
+    
+    for i in range(num_images):
+        augmented = pipeline(image=img)
+        aug_img = augmented["image"]
+        
+        out_filename = f"{base_name}_aug_{i+1}.png"
+        out_path = os.path.join(output_dir, out_filename)
+        
+        cv2.imwrite(out_path, aug_img)
+        generated_paths.append(out_path)
+        
+    return generated_paths
