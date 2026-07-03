@@ -45,6 +45,8 @@ TRANSFORM = transforms.Compose([
 # -----------------------------------------------------------------------
 # Build backbone (ResNet50 minus the final classification layer)
 # -----------------------------------------------------------------------
+_BACKBONE_CACHE = None
+
 def build_backbone() -> nn.Module:
     """Load pre-trained ResNet50 and strip the final FC layer.
     
@@ -53,13 +55,16 @@ def build_backbone() -> nn.Module:
     This technique is called 'feature extraction' and is the foundation
     of transfer learning.
     """
-    print("Loading ResNet50 backbone...")
-    backbone = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
-    # Strip the final classification layer — output is now 2048-dim embeddings
-    backbone.fc = nn.Identity()
-    backbone.eval()
-    backbone.to(DEVICE)
-    return backbone
+    global _BACKBONE_CACHE
+    if _BACKBONE_CACHE is None:
+        print("Loading ResNet50 backbone...")
+        backbone = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
+        # Strip the final classification layer — output is now 2048-dim embeddings
+        backbone.fc = nn.Identity()
+        backbone.eval()
+        backbone.to(DEVICE)
+        _BACKBONE_CACHE = backbone
+    return _BACKBONE_CACHE
 
 
 # -----------------------------------------------------------------------
