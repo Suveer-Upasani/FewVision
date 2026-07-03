@@ -173,7 +173,7 @@ def process_folder(folder_path: str) -> None:
     for r in results:
         img_path = r.image_path
         try:
-            generate_batch(img_path, output_dir=aug_dir, num_images=10)
+            generate_batch(img_path, output_dir=aug_dir, num_images=10, augmentations=r.augmentations)
         except Exception as e:
             print(f"[X]  Augmentation failed for {img_path}: {e}")
     print(f"Augmented dataset saved to: {aug_dir}")

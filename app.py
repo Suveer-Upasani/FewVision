@@ -53,7 +53,7 @@ def analyze():
             for f in os.listdir(temp_aug_dir):
                 os.remove(os.path.join(temp_aug_dir, f))
                 
-            generate_batch(filepath, output_dir=temp_aug_dir, num_images=10)
+            generate_batch(filepath, output_dir=temp_aug_dir, num_images=10, augmentations=result.augmentations)
             
             # b. Extract Features
             features, labels = feature_extraction.extract_features(temp_aug_dir)
