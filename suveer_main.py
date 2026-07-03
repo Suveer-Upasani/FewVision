@@ -155,39 +155,6 @@ def process_folder(folder_path: str) -> None:
         print(f"Duplicates CSV    : {analytics['duplicates_csv']}")
         print(f"Embedding preview : {analytics['embedding_plot']}")
 
-    # -----------------------------------------------------------------------
-    # Machine Learning Pipeline (Member 1, 2, 3)
-    # -----------------------------------------------------------------------
-    # Member 1 Task: Adaptive Augmentation
-    print("\nStarting Adaptive Augmentation batch generation...")
-    from augmentations import generate_batch
-    aug_dir = os.path.join(os.getcwd(), "augmented_dataset")
-    for r in results:
-        img_path = r.image_path
-        try:
-            generate_batch(img_path, output_dir=aug_dir, num_images=10)
-        except Exception as e:
-            print(f"✗  Augmentation failed for {img_path}: {e}")
-    print(f"Augmented dataset saved to: {aug_dir}")
-
-    # Member 2 Task: Feature Extraction
-    print("\nStarting Feature Extraction via ResNet50...")
-    try:
-        from feature_extraction import run as extract_features_run
-        extract_features_run(image_dir=aug_dir)
-    except ImportError:
-        print("✗  torch/torchvision not installed. Run: pip install torch torchvision")
-    except Exception as e:
-        print(f"✗  Feature extraction failed: {e}")
-
-    # Member 3 Task: Few-Shot Classification
-    print("\nPrototypical Network classifier...")
-    try:
-        from few_shot_model import run as few_shot_run
-        few_shot_run()
-    except Exception as e:
-        print(f"✗  Few-shot classification failed: {e}")
-
     print(f"\nAll reports written to ./{REPORTS_DIR}/")
 
 

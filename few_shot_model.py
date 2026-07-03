@@ -1,5 +1,5 @@
 # few_shot_model.py
-"""Member 3 Task: Few-Shot Learning Classifier using Prototypical Networks.
+"""Task: Few-Shot Learning Classifier using Prototypical Networks.
 
 This module takes the feature vectors extracted by Member 2 (feature_extraction.py)
 and builds a Prototypical Network classifier. 
