@@ -30,12 +30,14 @@ VALID_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
-os.makedirs(LOG_DIR, exist_ok=True)
-logging.basicConfig(
-    filename=os.path.join(LOG_DIR, "pipeline.log"),
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(message)s",
-)
+def setup_logging():
+    os.makedirs(LOG_DIR, exist_ok=True)
+    logging.basicConfig(
+        filename=os.path.join(LOG_DIR, "pipeline.log"),
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(message)s",
+    )
+
 logger = logging.getLogger("fewvision")
 
 
@@ -201,6 +203,7 @@ def process_folder(folder_path: str) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    setup_logging()
     import sys
 
     default = os.path.join(os.getcwd(), "images")
