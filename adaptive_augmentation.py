@@ -78,6 +78,13 @@ def decide_augmentations(
     if quality.overexposed_pct > 5.0:
         _add(augments, "brightness_down")
 
+    # Conflict Resolution
+    if "brightness_up" in augments and "brightness_down" in augments:
+        if quality.brightness < 128.0:
+            augments.remove("brightness_down")
+        else:
+            augments.remove("brightness_up")
+
     # ---- Scale by suitability ----
     if suitability_score > 85:
         max_augs = 12
@@ -102,6 +109,9 @@ def decide_augmentations(
     for aug in generic_pool:
         if len(augments) >= max_augs:
             break
+        # Skip contradictory blurs if sharpen is already selected
+        if aug == "motion_blur" and "sharpen" in augments:
+            continue
         _add(augments, aug)
 
     return augments[:max_augs]

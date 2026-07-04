@@ -71,8 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const formData = new FormData();
         for (let i = 0; i < files.length; i++) {
-            if (files[i].type.startsWith('image/')) {
-                formData.append('files', files[i]);
+            if (files[i].type.startsWith('image/') || files[i].name.match(/\.(png|jpe?g|bmp)$/i)) {
+                formData.append('files', files[i], files[i].webkitRelativePath || files[i].name);
             }
         }
 

@@ -30,12 +30,14 @@ VALID_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
-os.makedirs(LOG_DIR, exist_ok=True)
-logging.basicConfig(
-    filename=os.path.join(LOG_DIR, "pipeline.log"),
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(message)s",
-)
+def setup_logging():
+    os.makedirs(LOG_DIR, exist_ok=True)
+    logging.basicConfig(
+        filename=os.path.join(LOG_DIR, "pipeline.log"),
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(message)s",
+    )
+
 logger = logging.getLogger("fewvision")
 
 
@@ -103,18 +105,43 @@ def _write_json(results: list[AnalysisResult], path: str) -> None:
 # Folder processing
 # ---------------------------------------------------------------------------
 def process_folder(folder_path: str) -> None:
-    """Process every supported image in *folder_path*."""
+    """Process every supported image in PASS and DEFECT subfolders under *folder_path*."""
     os.makedirs(REPORTS_DIR, exist_ok=True)
 
-    image_paths = sorted(
-        os.path.join(folder_path, f)
-        for f in os.listdir(folder_path)
-        if os.path.splitext(f)[1].lower() in VALID_EXT
-    )
+    pass_dir = os.path.join(folder_path, "PASS")
+    defect_dir = os.path.join(folder_path, "DEFECT")
+
+    # Enforce class folder directories
+    if not os.path.exists(pass_dir) and not os.path.exists(defect_dir):
+        # Fallback to checking flat directory for legacy CLI backward compatibility
+        root_files = [f for f in os.listdir(folder_path) if os.path.splitext(f)[1].lower() in VALID_EXT]
+        if root_files:
+            # If flat files exist, we raise a ValueError to reject invalid dataset structure
+            raise ValueError(
+                "Invalid training dataset structure. Filename-based labeling is retired. "
+                "Please place images inside 'PASS' and/or 'DEFECT' folders."
+            )
+        else:
+            raise FileNotFoundError(
+                f"No 'PASS' or 'DEFECT' folders containing images found in: {folder_path}"
+            )
+
+    # Discover images inside subfolders
+    image_paths = []
+    classes = ["PASS", "DEFECT"]
+    for cls in classes:
+        cls_dir = os.path.join(folder_path, cls)
+        if os.path.isdir(cls_dir):
+            paths = sorted(
+                os.path.join(cls_dir, f)
+                for f in os.listdir(cls_dir)
+                if os.path.splitext(f)[1].lower() in VALID_EXT
+            )
+            image_paths.extend(paths)
 
     if not image_paths:
-        print("No supported images found.")
-        logger.warning("No images found in %s", folder_path)
+        print("No supported images found in PASS or DEFECT subfolders.")
+        logger.warning("No images found in PASS/DEFECT under %s", folder_path)
         return
 
     results: list[AnalysisResult] = []
@@ -171,7 +198,13 @@ def process_folder(folder_path: str) -> None:
     for r in results:
         img_path = r.image_path
         try:
-            generate_batch(img_path, output_dir=aug_dir, num_images=10)
+            # Preserve class identity in output directories
+            class_label = os.path.basename(os.path.dirname(img_path))
+            if class_label in {"PASS", "DEFECT"}:
+                out_dir = os.path.join(aug_dir, class_label)
+            else:
+                out_dir = aug_dir # Legacy fallback
+            generate_batch(img_path, output_dir=out_dir, num_images=10, augmentations=r.augmentations)
         except Exception as e:
             print(f"[X]  Augmentation failed for {img_path}: {e}")
     print(f"Augmented dataset saved to: {aug_dir}")
@@ -201,6 +234,7 @@ def process_folder(folder_path: str) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    setup_logging()
     import sys
 
     default = os.path.join(os.getcwd(), "images")
