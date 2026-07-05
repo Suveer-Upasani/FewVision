@@ -1,26 +1,67 @@
-# .gitignore for Python project
-# General
+# .gitignore — FewVision
+
+# ============================================================
+# Python
+# ============================================================
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
 
-# Virtual environment
+# ============================================================
+# Virtual Environments
+# ============================================================
 venv/
+env/
+.venv/
 .env
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
-
-# VSCode settings
+# ============================================================
+# IDE / Editor
+# ============================================================
 .vscode/
+.idea/
+*.swp
+*.swo
 
-# macOS Finder metadata
+# ============================================================
+# macOS
+# ============================================================
 .DS_Store
+.AppleDouble
+.LSOverride
 
-# Python egg files
-*.egg-info/
+# ============================================================
+# Generated Data — NEVER commit these
+# ============================================================
+data/uploads/
+data/augmented/
+data/reports/
+data/logs/
+data/temp/
 
-# Test and coverage reports
+# Legacy root-level data directories (from old structure)
+uploads/
+augmented_dataset/
+reports/
+logs/
+
+# Generated numpy files
+*.npy
+*.npz
+
+# ============================================================
+# Test datasets and sample images
+# ============================================================
+Tiles_dataset/
+
+# ============================================================
+# Test / Coverage
+# ============================================================
 htmlcov/
 .coverage
 .coverage.*
@@ -29,12 +70,15 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
+.pytest_cache/
 
+# ============================================================
 # Logs
+# ============================================================
 *.log
 
-# Ignore everything else that is temporary or OS generated
-*.swp
-*.swo
-
-# Note: The 'images/' directory is intentionally NOT ignored so that image assets are tracked.
+# ============================================================
+# Misc
+# ============================================================
+pipeline.png
+.ipynb_checkpoints/

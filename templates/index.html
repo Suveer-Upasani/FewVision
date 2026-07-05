@@ -3,120 +3,144 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FewVision Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <title>FewVision — Industrial Part Inspection</title>
+    <meta name="description" content="Adaptive quality-aware few-shot learning system for industrial part inspection. Upload images for automated quality analysis and dataset augmentation.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="background-gradients">
-        <div class="glow-orb orb-1"></div>
-        <div class="glow-orb orb-2"></div>
+
+    <!-- Animated background -->
+    <div class="bg-canvas" aria-hidden="true">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="grid-lines"></div>
     </div>
 
-    <main class="dashboard">
-        <header class="hero">
-            <h1>FewVision</h1>
-            <p>Dynamic Few-Shot Learning for Manufacturing Defect Detection</p>
+    <main class="page-upload">
+
+        <!-- Header -->
+        <header class="site-header">
+            <div class="logo-mark">FV</div>
+            <nav class="breadcrumb">
+                <span class="bc-step bc-active">Upload</span>
+                <span class="bc-arrow">›</span>
+                <span class="bc-step">Dashboard</span>
+                <span class="bc-arrow">›</span>
+                <span class="bc-step">Download</span>
+            </nav>
         </header>
 
-        <!-- TRAINING SECTION -->
-        <section class="upload-section" id="trainSection">
-            <h2 class="section-title">1. Train on New Object</h2>
-            <div id="dropzoneTrain" class="dropzone">
-                <div class="drop-content">
-                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="17 8 12 3 7 8"></polyline>
-                        <line x1="12" y1="3" x2="12" y2="15"></line>
+        <!-- Hero -->
+        <section class="hero">
+            <div class="hero-badge">Adaptive Quality-Aware Analysis</div>
+            <h1>FewVision</h1>
+            <p class="hero-sub">Upload 5–20 industrial part images. We'll analyse quality, content, and generate an optimised augmented dataset for few-shot learning.</p>
+        </section>
+
+        <!-- Upload card -->
+        <section class="upload-card" aria-label="Image upload">
+
+            <!-- Dropzone -->
+            <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Drop images here or click to browse">
+                <div class="drop-idle" id="dropIdle">
+                    <svg class="drop-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+                        <circle cx="32" cy="32" r="30" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.4"/>
+                        <path d="M32 42V26M24 34l8-8 8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <rect x="20" y="44" width="24" height="4" rx="2" fill="currentColor" opacity="0.3"/>
                     </svg>
-                    <h3>Upload Support Set (PASS & DEFECT images)</h3>
-                    <p>Select multiple images to train the model from scratch</p>
+                    <h2 class="drop-title">Drop Images Here</h2>
+                    <p class="drop-hint">or <button type="button" class="link-btn" id="browseBtn">browse files</button></p>
+                    <p class="drop-formats">Supported: JPG, PNG, BMP, TIFF &nbsp;·&nbsp; Up to 50 images &nbsp;·&nbsp; 64 MB total</p>
                 </div>
-                <input type="file" id="fileInputTrain" accept="image/*" multiple style="display: none;">
+                <div class="drop-active-overlay" id="dropOverlay" aria-hidden="true">
+                    <svg viewBox="0 0 64 64" fill="none" width="56"><path d="M32 44V28M24 36l8-8 8 8" stroke="#7c4dff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <p>Release to add images</p>
+                </div>
+                <input type="file" id="fileInput" accept="image/*" multiple style="display:none" aria-hidden="true">
             </div>
-            
-            <div id="loadingTrain" class="loading hidden">
-                <div class="spinner"></div>
-                <p>Augmenting dataset & Training Prototypical Network... (This may take a minute)</p>
-            </div>
-            <div id="trainSuccess" class="success-message hidden">
-                <p>✅ Model successfully trained on new object!</p>
-            </div>
-        </section>
 
-        <!-- TESTING SECTION -->
-        <section class="upload-section" id="testSection" style="margin-top: 40px;">
-            <h2 class="section-title">2. Test Single Image</h2>
-            <div id="dropzone" class="dropzone">
-                <div class="drop-content">
-                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="16" x2="12" y2="12"></line>
-                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            <!-- Preview grid -->
+            <div id="previewSection" class="preview-section hidden">
+                <div class="preview-header">
+                    <span id="previewCount" class="preview-count">0 images selected</span>
+                    <button type="button" class="btn-ghost" id="clearBtn">Clear all</button>
+                </div>
+                <div id="previewGrid" class="preview-grid" role="list" aria-label="Selected images"></div>
+            </div>
+
+            <!-- Action -->
+            <div id="actionBar" class="action-bar hidden">
+                <button type="button" class="btn-primary" id="analyzeBtn">
+                    <svg viewBox="0 0 20 20" fill="none" width="18" aria-hidden="true">
+                        <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    <h3>Test an Image</h3>
-                    <p>Drag & Drop a single image to test against the trained model</p>
-                </div>
-                <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                    Analyse Dataset
+                </button>
             </div>
-            
-            <div id="loading" class="loading hidden">
-                <div class="spinner"></div>
-                <p>Analyzing quality & generating predictions...</p>
+
+            <!-- Processing state -->
+            <div id="processingState" class="processing-state hidden" role="status" aria-live="polite">
+                <div class="processing-inner">
+                    <div class="pulse-ring" aria-hidden="true">
+                        <div class="pulse-core"></div>
+                    </div>
+                    <div class="processing-text">
+                        <h3>Analysing your images…</h3>
+                        <p id="processingStep">Running quality analysis</p>
+                    </div>
+                </div>
+                <div class="processing-steps">
+                    <div class="proc-step active" id="step1">
+                        <span class="step-dot"></span> Quality Analysis
+                    </div>
+                    <div class="proc-step" id="step2">
+                        <span class="step-dot"></span> Content Analysis
+                    </div>
+                    <div class="proc-step" id="step3">
+                        <span class="step-dot"></span> Adaptive Policy
+                    </div>
+                    <div class="proc-step" id="step4">
+                        <span class="step-dot"></span> Report Generation
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Feature strip -->
+        <section class="feature-strip" aria-label="Pipeline stages">
+            <div class="feature-item">
+                <span class="feat-icon">🔍</span>
+                <span class="feat-label">Quality Analysis</span>
+                <span class="feat-desc">Blur, brightness, noise, contrast</span>
+            </div>
+            <div class="feat-divider" aria-hidden="true">›</div>
+            <div class="feature-item">
+                <span class="feat-icon">📐</span>
+                <span class="feat-label">Content Analysis</span>
+                <span class="feat-desc">Coverage, orientation, background</span>
+            </div>
+            <div class="feat-divider" aria-hidden="true">›</div>
+            <div class="feature-item">
+                <span class="feat-icon">🧠</span>
+                <span class="feat-label">Adaptive Policy</span>
+                <span class="feat-desc">Smart augmentation selection</span>
+            </div>
+            <div class="feat-divider" aria-hidden="true">›</div>
+            <div class="feature-item">
+                <span class="feat-icon">⬇️</span>
+                <span class="feat-label">Download ZIP</span>
+                <span class="feat-desc">Augmented dataset ready to use</span>
             </div>
         </section>
 
-        <section id="results" class="results-section hidden">
-            <div class="results-grid">
-                
-                <!-- Prediction Card -->
-                <div class="glass-card prediction-card">
-                    <h2>AI Verdict</h2>
-                    <div class="verdict-container" id="verdictContainer">
-                        <h1 id="mlPrediction" class="verdict-text">PASS</h1>
-                        <p class="confidence">Confidence: <span id="mlConfidence">100</span>%</p>
-                    </div>
-                </div>
-
-                <!-- Metrics Card -->
-                <div class="glass-card metrics-card">
-                    <h2>Image Quality & Content</h2>
-                    <div class="metric-row">
-                        <span class="label">Suitability Rating</span>
-                        <span class="value highlight" id="suitabilityRating">Ready</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="label">Quality Score</span>
-                        <div class="bar-container"><div class="bar" id="barQuality"></div></div>
-                        <span class="value" id="qualityScore">85</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="label">Content Score</span>
-                        <div class="bar-container"><div class="bar" id="barContent"></div></div>
-                        <span class="value" id="contentScore">80</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="label">Blur Factor</span>
-                        <span class="value" id="blurValue">210.5</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="label">Noise (MAD)</span>
-                        <span class="value" id="noiseValue">0.5</span>
-                    </div>
-                </div>
-
-                <!-- Report Heatmap Card -->
-                <div class="glass-card report-card">
-                    <h2>Sharpness Heatmap</h2>
-                    <div class="image-container">
-                        <img id="reportImage" src="" alt="Heatmap Report">
-                    </div>
-                </div>
-
-            </div>
-        </section>
     </main>
 
-    <script src="/static/js/main.js"></script>
+    <script src="/static/js/upload.js"></script>
 </body>
 </html>

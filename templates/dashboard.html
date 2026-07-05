@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Dashboard — FewVision</title>
+    <meta name="description" content="Per-image quality and content analysis dashboard for your uploaded industrial part images.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <div class="bg-canvas" aria-hidden="true">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="grid-lines"></div>
+    </div>
+
+    <main class="page-dashboard">
+
+        <!-- Header -->
+        <header class="site-header">
+            <div class="logo-mark">FV</div>
+            <nav class="breadcrumb">
+                <a href="/" class="bc-step bc-done">Upload</a>
+                <span class="bc-arrow">›</span>
+                <span class="bc-step bc-active">Dashboard</span>
+                <span class="bc-arrow">›</span>
+                <span class="bc-step">Download</span>
+            </nav>
+        </header>
+
+        <!-- Dataset summary bar -->
+        <section class="summary-bar" aria-label="Dataset summary">
+            <div class="summary-title">
+                <h1>Analysis Dashboard</h1>
+                <p>Session <code>{{ summary.session_id }}</code> — {{ summary.total_images }} image{{ 's' if summary.total_images != 1 }}</p>
+            </div>
+            <div class="summary-stats">
+                <div class="stat-chip stat-ready">
+                    <span class="stat-val">{{ summary.ready_count }}</span>
+                    <span class="stat-lbl">Ready</span>
+                </div>
+                <div class="stat-chip stat-marginal">
+                    <span class="stat-val">{{ summary.marginal_count }}</span>
+                    <span class="stat-lbl">Marginal</span>
+                </div>
+                <div class="stat-chip stat-unsuitable">
+                    <span class="stat-val">{{ summary.unsuitable_count }}</span>
+                    <span class="stat-lbl">Unsuitable</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Per-image cards -->
+        <section class="images-section" aria-label="Per-image analysis">
+            {% if images %}
+            <div class="image-cards" id="imageCards">
+                {% for img in images %}
+                <article class="image-card" data-suitability="{{ img.suitability_rating | lower }}">
+
+                    <!-- Card header -->
+                    <div class="card-header">
+                        <div class="card-filename">{{ img.image }}</div>
+                        <div class="suitability-badge badge-{{ img.suitability_rating | lower }}">
+                            {% if img.suitability_rating == 'Ready' %}✅{% elif img.suitability_rating == 'Marginal' %}⚠️{% else %}❌{% endif %}
+                            {{ img.suitability_rating }}
+                        </div>
+                    </div>
+
+                    <!-- Score bars -->
+                    <div class="score-row">
+                        <span class="score-label">Quality</span>
+                        <div class="score-track">
+                            <div class="score-bar bar-quality" style="width: {{ img.quality.quality_score }}%"
+                                 role="progressbar" aria-valuenow="{{ img.quality.quality_score }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <span class="score-value">{{ img.quality.quality_score | round | int }}/100</span>
+                    </div>
+                    <div class="score-row">
+                        <span class="score-label">Content</span>
+                        <div class="score-track">
+                            <div class="score-bar bar-content" style="width: {{ img.content.content_score }}%"
+                                 role="progressbar" aria-valuenow="{{ img.content.content_score }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <span class="score-value">{{ img.content.content_score | round | int }}/100</span>
+                    </div>
+
+                    <!-- Metric grid -->
+                    <div class="metric-grid">
+                        <div class="metric-cell">
+                            <span class="metric-label">Blur</span>
+                            <span class="metric-value">{{ img.quality.blur }}</span>
+                        </div>
+                        <div class="metric-cell">
+                            <span class="metric-label">Brightness</span>
+                            <span class="metric-value">{{ img.quality.brightness }}</span>
+                        </div>
+                        <div class="metric-cell">
+                            <span class="metric-label">Contrast</span>
+                            <span class="metric-value">{{ img.quality.contrast }}</span>
+                        </div>
+                        <div class="metric-cell">
+                            <span class="metric-label">Noise (MAD)</span>
+                            <span class="metric-value">{{ img.quality.noise }}</span>
+                        </div>
+                        <div class="metric-cell">
+                            <span class="metric-label">Background</span>
+                            <span class="metric-value">{{ img.content.background }}</span>
+                        </div>
+                        <div class="metric-cell">
+                            <span class="metric-label">Lighting</span>
+                            <span class="metric-value">{{ img.content.lighting }}</span>
+                        </div>
+                        <div class="metric-cell">
+                            <span class="metric-label">Coverage</span>
+                            <span class="metric-value">{{ img.content.object_coverage }}%</span>
+                        </div>
+                        <div class="metric-cell">
+                            <span class="metric-label">Orientation</span>
+                            <span class="metric-value">{{ img.content.orientation }}°</span>
+                        </div>
+                    </div>
+
+                    <!-- Augmentation tags -->
+                    <div class="aug-section">
+                        <span class="aug-label">Augmentations ({{ img.augmentations | length }})</span>
+                        <div class="aug-tags" role="list">
+                            {% for aug in img.augmentations[:6] %}
+                            <span class="aug-tag" role="listitem">{{ aug }}</span>
+                            {% endfor %}
+                            {% if img.augmentations | length > 6 %}
+                            <span class="aug-tag aug-more">+{{ img.augmentations | length - 6 }} more</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Report heatmap (lazy-loaded) -->
+                    <details class="report-details">
+                        <summary class="report-toggle">View Sharpness Report</summary>
+                        <div class="report-img-wrap">
+                            <img loading="lazy" src="{{ img.report_url }}" alt="Analysis report for {{ img.image }}" class="report-img">
+                        </div>
+                    </details>
+
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>No images were processed. <a href="/">Go back and upload images.</a></p>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- Generate CTA -->
+        {% if images %}
+        <section class="generate-cta" aria-label="Generate augmented dataset">
+            <div class="cta-card">
+                <div class="cta-text">
+                    <h2>Ready to augment?</h2>
+                    <p>Generate your optimised augmented dataset and download it as a ZIP file, ready for few-shot learning.</p>
+                </div>
+                <div class="cta-actions">
+                    <button type="button" class="btn-primary btn-xl" id="generateBtn" data-session="{{ session_id }}">
+                        <svg viewBox="0 0 20 20" fill="none" width="18" aria-hidden="true">
+                            <path d="M10 3v10M6 9l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M3 15h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                        Generate Augmented Dataset
+                    </button>
+                </div>
+            </div>
+
+            <!-- Generation progress -->
+            <div id="genProgress" class="gen-progress hidden" role="status" aria-live="polite">
+                <div class="spinner-small" aria-hidden="true"></div>
+                <p>Generating augmented images…</p>
+            </div>
+        </section>
+        {% endif %}
+
+    </main>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
