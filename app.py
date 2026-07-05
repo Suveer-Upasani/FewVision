@@ -7,12 +7,15 @@ the pipeline module.
 
 Routes
 ------
-GET  /                          Upload page
-POST /api/upload                Accept images and run pipeline
-GET  /dashboard/<session_id>    Analysis dashboard
-POST /api/generate/<session_id> Generate augmented dataset ZIP
-GET  /api/download/<session_id> Stream ZIP file download
+GET  /                               Upload page
+POST /api/upload                     Accept images and run pipeline
+GET  /dashboard/<session_id>         Analysis dashboard
+POST /api/generate/<session_id>      Generate augmented dataset ZIP
+GET  /api/download/<session_id>      Stream ZIP file download
+GET  /results/<session_id>           Results summary page
 GET  /reports/<session_id>/<filename> Serve report images
+GET  /api/embeddings/<session_id>    Embedding database metadata (JSON)
+GET  /api/embeddings/<session_id>/download  Download embeddings.npy
 """
 
 import os
@@ -289,6 +292,46 @@ def create_app() -> Flask:
         """
         report_dir = os.path.join(config.REPORTS_FOLDER, session_id)
         return send_file(os.path.join(report_dir, secure_filename(filename)))
+
+    # ---------------------------------------------------------------------------
+    # Embedding API routes
+    # ---------------------------------------------------------------------------
+
+    @app.route("/api/embeddings/<session_id>")
+    def embedding_info(session_id: str):
+        """Return embedding database metadata as JSON.
+
+        Parameters
+        ----------
+        session_id : str
+            Session identifier.
+        """
+        from modules.feature_extraction.embedding_database import embedding_summary, list_sessions
+        sessions = list_sessions()
+        if session_id not in sessions:
+            return jsonify({"error": f"No embedding database found for session '{session_id}'"}), 404
+        summary = embedding_summary(session_id)
+        return jsonify(summary)
+
+    @app.route("/api/embeddings/<session_id>/download")
+    def download_embeddings(session_id: str):
+        """Stream the embeddings.npy binary file for download.
+
+        Parameters
+        ----------
+        session_id : str
+            Session identifier.
+        """
+        import config as _cfg
+        npy_path = os.path.join(_cfg.EMBEDDINGS_FOLDER, session_id, "embeddings.npy")
+        if not os.path.isfile(npy_path):
+            return jsonify({"error": "Embeddings not found for this session."}), 404
+        return send_file(
+            npy_path,
+            as_attachment=True,
+            download_name=f"fewvision_embeddings_{session_id}.npy",
+            mimetype="application/octet-stream",
+        )
 
     return app
 

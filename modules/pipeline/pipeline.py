@@ -34,6 +34,8 @@ from modules.augmentation.adaptive_policy import decide_augmentations
 from modules.augmentation.augmentations import generate_batch
 from modules.reporting.report_generator import generate_image_report
 from modules.reporting.dataset_analytics import analyze_dataset
+from modules.feature_extraction.extractor_factory import get_extractor
+from modules.feature_extraction.embedding_database import save_embeddings
 
 logger = logging.getLogger("fewvision")
 
@@ -132,6 +134,79 @@ def _write_json(results: list[AnalysisResult], path: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Feature extraction helpers
+# ---------------------------------------------------------------------------
+
+def _collect_augmented_images(aug_dir: str) -> list[str]:
+    """Return sorted absolute paths of all images in *aug_dir*."""
+    valid_ext = config.VALID_EXTENSIONS
+    return sorted(
+        os.path.join(aug_dir, f)
+        for f in os.listdir(aug_dir)
+        if os.path.splitext(f)[1].lower() in valid_ext
+    )
+
+
+def _build_embedding_metadata(
+    aug_image_paths: list[str],
+    results: list[AnalysisResult],
+) -> list[dict]:
+    """Build per-image metadata dicts for embedding_database.save_embeddings.
+
+    Maps each augmented image back to its source analysis result (matched
+    by stem prefix) to attach quality and content scores.
+
+    Parameters
+    ----------
+    aug_image_paths : list[str]
+        Absolute paths to augmented images.
+    results : list[AnalysisResult]
+        Per-image analysis results from the preprocessing pipeline.
+
+    Returns
+    -------
+    list[dict]
+        One metadata dict per augmented image.
+    """
+    # Build a fast lookup: source stem → AnalysisResult
+    source_map: dict[str, AnalysisResult] = {
+        os.path.splitext(r.image)[0]: r for r in results
+    }
+
+    metadata_list: list[dict] = []
+    for img_path in aug_image_paths:
+        fname = os.path.basename(img_path)
+        stem  = os.path.splitext(fname)[0]
+
+        # Augmented files are named like ``bearing001_aug_3.png``; match
+        # back to the source ``bearing001`` stem.
+        source_result: AnalysisResult | None = None
+        for src_stem, res in source_map.items():
+            if stem == src_stem or stem.startswith(src_stem + "_aug"):
+                source_result = res
+                break
+
+        if source_result is not None:
+            entry = {
+                "filename": fname,
+                "source_image": source_result.image,
+                "quality_score": source_result.quality.quality_score,
+                "quality_rating": source_result.quality.quality_rating,
+                "content_score": source_result.content.content_score,
+                "suitability_score": source_result.suitability_score,
+                "suitability_rating": source_result.suitability_rating,
+                "augmentations_applied": source_result.augmentations,
+                "is_augmented": stem != os.path.splitext(source_result.image)[0],
+            }
+        else:
+            entry = {"filename": fname}
+
+        metadata_list.append(entry)
+
+    return metadata_list
+
+
+# ---------------------------------------------------------------------------
 # Dataset pipeline
 # ---------------------------------------------------------------------------
 
@@ -225,9 +300,67 @@ def process_dataset(
     unsuitable = sum(1 for r in results if r.suitability_rating == "Unsuitable")
 
     logger.info(
-        "Session %s complete — %d images analysed, %d augmented",
+        "Session %s — preprocessing complete: %d analysed, %d augmented",
         session_id, len(results), augmented_count,
     )
+
+    # --- Step 6: Feature extraction (DINOv2) ---
+    embedding_path: str = ""
+    embedding_count: int = 0
+
+    if config.FEATURE_EXTRACTION_ENABLED:
+        try:
+            logger.info("Starting feature extraction for session %s …", session_id)
+
+            aug_image_paths = _collect_augmented_images(aug_dir)
+
+            if not aug_image_paths:
+                logger.warning("No augmented images found in %s — skipping extraction.", aug_dir)
+            else:
+                # Load model once — reused for entire session
+                extractor = get_extractor(config.FEATURE_EXTRACTOR)
+                extractor.load_model()
+
+                # Load images as BGR numpy arrays
+                import cv2 as _cv2
+                images_bgr = []
+                valid_paths = []
+                for p in aug_image_paths:
+                    img = _cv2.imread(p)
+                    if img is not None:
+                        images_bgr.append(img)
+                        valid_paths.append(p)
+                    else:
+                        logger.warning("Could not read augmented image: %s", p)
+
+                if images_bgr:
+                    embeddings = extractor.extract_batch(
+                        images_bgr,
+                        batch_size=config.EXTRACTION_BATCH_SIZE,
+                    )
+                    filenames = [os.path.basename(p) for p in valid_paths]
+                    metadata  = _build_embedding_metadata(valid_paths, results)
+
+                    embedding_path = save_embeddings(
+                        session_id=session_id,
+                        embeddings=embeddings,
+                        filenames=filenames,
+                        metadata=metadata,
+                        extractor_info=extractor.info,
+                    )
+                    embedding_count = len(filenames)
+
+                    logger.info(
+                        "Feature extraction complete — %d embeddings, dim=%d, saved to %s",
+                        embedding_count, extractor.embedding_dim, embedding_path,
+                    )
+
+        except Exception as exc:
+            logger.error(
+                "Feature extraction failed for session %s: %s",
+                session_id, exc, exc_info=True,
+            )
+            # Non-fatal: pipeline continues, embedding fields stay empty
 
     return DatasetResult(
         results=results,
@@ -240,7 +373,10 @@ def process_dataset(
         ready_count=ready,
         marginal_count=marginal,
         unsuitable_count=unsuitable,
+        embedding_path=embedding_path,
+        embedding_count=embedding_count,
     )
+
 
 
 def create_augmented_zip(session_id: str) -> str:

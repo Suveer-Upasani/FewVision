@@ -126,6 +126,9 @@ class DatasetResult:
     ready_count: int = 0
     marginal_count: int = 0
     unsuitable_count: int = 0
+    # Feature extraction outputs (populated when FEATURE_EXTRACTION_ENABLED)
+    embedding_path: str = ""      # absolute path to embeddings.npy
+    embedding_count: int = 0      # number of embeddings generated
 
     def summary_dict(self) -> dict:
         """Return a JSON-safe summary for API responses."""
@@ -138,4 +141,6 @@ class DatasetResult:
             "unsuitable_count": self.unsuitable_count,
             "augmented_dir": self.augmented_dir,
             "report_dir": self.report_dir,
+            "embedding_path": self.embedding_path,
+            "embedding_count": self.embedding_count,
         }

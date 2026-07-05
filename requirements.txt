@@ -19,7 +19,7 @@ scikit-image>=0.22.0      # Optional: used for SSIM in duplicate detection
 Flask>=3.0.0
 Werkzeug>=3.0.0
 
-# --- Deep Learning (Optional — required for future models/ module only) ---
-# Uncomment when implementing feature extraction and few-shot models:
-# torch>=2.0.0
-# torchvision>=0.15.0
+# --- Deep Learning (required for DINOv2 feature extraction) ---
+# Weights are downloaded automatically on first run (~85 MB for dinov2_vits14)
+torch>=2.0.0
+torchvision>=0.15.0
