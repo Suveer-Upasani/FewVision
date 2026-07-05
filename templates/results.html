@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results — FewVision</title>
+    <meta name="description" content="Your augmented dataset is ready. Download the ZIP file for few-shot learning.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <div class="bg-canvas" aria-hidden="true">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="grid-lines"></div>
+    </div>
+
+    <main class="page-results">
+
+        <!-- Header -->
+        <header class="site-header">
+            <div class="logo-mark">FV</div>
+            <nav class="breadcrumb">
+                <a href="/" class="bc-step bc-done">Upload</a>
+                <span class="bc-arrow">›</span>
+                <a href="/dashboard/{{ session_id }}" class="bc-step bc-done">Dashboard</a>
+                <span class="bc-arrow">›</span>
+                <span class="bc-step bc-active">Download</span>
+            </nav>
+        </header>
+
+        <!-- Success hero -->
+        <section class="results-hero">
+            <div class="success-icon" aria-hidden="true">
+                <svg viewBox="0 0 80 80" fill="none" width="80">
+                    <circle cx="40" cy="40" r="38" stroke="#7c4dff" stroke-width="2" opacity="0.3"/>
+                    <circle cx="40" cy="40" r="30" fill="rgba(124,77,255,0.1)"/>
+                    <path d="M26 40l10 10 18-18" stroke="#7c4dff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <h1>Dataset Ready!</h1>
+            <p>Your augmented dataset has been generated and is ready for download.</p>
+        </section>
+
+        <!-- Summary stats -->
+        <section class="results-stats" aria-label="Generation summary">
+            <div class="results-grid">
+                <div class="result-stat-card">
+                    <div class="rstat-value">{{ summary.total_images }}</div>
+                    <div class="rstat-label">Source Images</div>
+                </div>
+                <div class="result-stat-card rstat-accent">
+                    <div class="rstat-value">{{ summary.augmented_count }}</div>
+                    <div class="rstat-label">Augmented Images</div>
+                </div>
+                <div class="result-stat-card">
+                    <div class="rstat-value">{{ summary.ready_count }}</div>
+                    <div class="rstat-label">Ready ✅</div>
+                </div>
+                <div class="result-stat-card">
+                    <div class="rstat-value">{{ summary.marginal_count }}</div>
+                    <div class="rstat-label">Marginal ⚠️</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Download card -->
+        <section class="download-section" aria-label="Download augmented dataset">
+            <div class="download-card">
+                <div class="download-icon" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" fill="none" width="48">
+                        <rect x="4" y="4" width="40" height="40" rx="8" fill="rgba(124,77,255,0.12)"/>
+                        <path d="M24 14v16M16 24l8 8 8-8" stroke="#7c4dff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M12 34h24" stroke="#7c4dff" stroke-width="2.5" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="download-info">
+                    <h2>Augmented Dataset</h2>
+                    <p>Contains {{ summary.augmented_count }} images generated from {{ summary.total_images }} source{{ 's' if summary.total_images != 1 }}</p>
+                    <code class="session-code">Session: {{ summary.session_id }}</code>
+                </div>
+                <a href="/api/download/{{ session_id }}"
+                   class="btn-primary btn-xl btn-download"
+                   id="downloadBtn"
+                   download>
+                    <svg viewBox="0 0 20 20" fill="none" width="18" aria-hidden="true">
+                        <path d="M10 3v10M6 9l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M3 15h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                    Download ZIP
+                </a>
+            </div>
+        </section>
+
+        <!-- What's inside -->
+        <section class="whats-inside" aria-label="Dataset contents">
+            <h2>What's inside the ZIP</h2>
+            <div class="inside-grid">
+                <div class="inside-item">
+                    <span class="inside-icon">🖼️</span>
+                    <div>
+                        <strong>Augmented Images</strong>
+                        <p>{{ summary.augmented_count }} images with adaptive brightness, contrast, flip, rotation, and noise transforms</p>
+                    </div>
+                </div>
+                <div class="inside-item">
+                    <span class="inside-icon">📊</span>
+                    <div>
+                        <strong>Analysis Reports</strong>
+                        <p>Per-image sharpness heatmaps and stats cards in PNG format</p>
+                    </div>
+                </div>
+                <div class="inside-item">
+                    <span class="inside-icon">📁</span>
+                    <div>
+                        <strong>Report CSV + JSON</strong>
+                        <p>Machine-readable metrics for all analysed images</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Actions -->
+        <div class="results-actions">
+            <a href="/" class="btn-ghost">
+                ← Upload New Dataset
+            </a>
+            <a href="/dashboard/{{ session_id }}" class="btn-outline">
+                ← Back to Dashboard
+            </a>
+        </div>
+
+    </main>
+
+    <script src="/static/js/results.js"></script>
+</body>
+</html>

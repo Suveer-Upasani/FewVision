@@ -1,23 +1,25 @@
 # ==========================================
-# FewVision - Adaptive Quality-Aware Few-Shot Learning
+# FewVision — Adaptive Quality-Aware Few-Shot Learning
 # Requirements
 # ==========================================
 
-# Core Scientific Computing
+# --- Core Scientific Computing ---
 numpy>=1.26.0
 pandas>=2.2.0
 
-# Computer Vision
+# --- Computer Vision ---
 opencv-python>=4.10.0
 albumentations>=1.4.0
 
-# Deep Learning
-torch>=2.0.0
-torchvision>=0.15.0
-
-# Visualization
+# --- Visualisation ---
 matplotlib>=3.8.0
+scikit-image>=0.22.0      # Optional: used for SSIM in duplicate detection
 
-# Web/API (Optional)
+# --- Web Framework ---
 Flask>=3.0.0
 Werkzeug>=3.0.0
+
+# --- Deep Learning (Optional — required for future models/ module only) ---
+# Uncomment when implementing feature extraction and few-shot models:
+# torch>=2.0.0
+# torchvision>=0.15.0
