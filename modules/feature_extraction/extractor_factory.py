@@ -43,12 +43,17 @@ def _dinov2_class() -> type[BaseExtractor]:
     return DINOv2Extractor
 
 
+def _vit_class() -> type[BaseExtractor]:
+    from modules.feature_extraction.vit_extractor import ViTExtractor
+    return ViTExtractor
+
+
 REGISTRY: dict[str, callable] = {
     "dinov2": _dinov2_class,
+    "vit": _vit_class,
     # Future extractors — uncomment and implement when ready:
     # "clip":     lambda: _import("modules.feature_extraction.clip_extractor", "CLIPExtractor"),
     # "resnet50": lambda: _import("modules.feature_extraction.resnet_extractor", "ResNet50Extractor"),
-    # "vit":      lambda: _import("modules.feature_extraction.vit_extractor", "ViTExtractor"),
 }
 
 
@@ -110,6 +115,15 @@ def get_extractor(
             kwargs.setdefault(
                 "model_variant",
                 getattr(_cfg, "DINOV2_MODEL_VARIANT", "dinov2_vits14"),
+            )
+        except ImportError:
+            pass
+    elif name == "vit" and "model_variant" not in kwargs:
+        try:
+            import config as _cfg
+            kwargs.setdefault(
+                "model_variant",
+                getattr(_cfg, "VIT_MODEL_VARIANT", "vit_b_16"),
             )
         except ImportError:
             pass

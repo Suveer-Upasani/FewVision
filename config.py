@@ -57,6 +57,10 @@ FEATURE_EXTRACTOR = os.environ.get("FEWVISION_EXTRACTOR", "dinov2")
 #   dinov2_vitl14 — 1024-dim, best quality (slow)
 DINOV2_MODEL_VARIANT = os.environ.get("FEWVISION_DINOV2_VARIANT", "dinov2_vits14")
 
+# ViT model variant. Options:
+#   vit_b_16 — 768-dim, standard ImageNet-1K pretrained ViT (default)
+VIT_MODEL_VARIANT = os.environ.get("FEWVISION_VIT_VARIANT", "vit_b_16")
+
 # Number of images per forward pass (increase if GPU memory allows)
 EXTRACTION_BATCH_SIZE = int(os.environ.get("FEWVISION_BATCH_SIZE", "32"))
 

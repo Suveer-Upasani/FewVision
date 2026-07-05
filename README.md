@@ -27,8 +27,8 @@ Adaptive Augmentation Policy
 Reference Dataset  ←  augmented images saved to data/augmented/
          │
          ▼
-DINOv2 Feature Extraction  ✅  (implemented)
-(ViT-S/14 · 384-dim CLS-token embeddings · MPS/CUDA/CPU auto-detect)
+Feature Extraction  ✅  (implemented)
+(DINOv2 [default] / ViT-B/16 · MPS/CUDA/CPU auto-detect)
          │
          ▼
 Embedding Database  ←  data/embeddings/{session_id}/
@@ -55,10 +55,11 @@ FewVision/
 │   ├── augmentation/       # Adaptive policy + Albumentations engine
 │   ├── reporting/          # Per-image PNG reports + dataset analytics
 │   ├── pipeline/           # Orchestrator — coordinates all 6 stages
-│   ├── feature_extraction/ # DINOv2 embeddings (NEW)
+│   ├── feature_extraction/ # Embedding extraction modules
 │   │   ├── base_extractor.py      # Abstract interface for all extractors
-│   │   ├── preprocessing.py       # DINOv2-spec image transforms
+│   │   ├── preprocessing.py       # Preprocessing transforms (DINOv2 spec)
 │   │   ├── dinov2_extractor.py    # DINOv2 ViT-S/14 implementation
+│   │   ├── vit_extractor.py       # ViT-B/16 implementation (NEW)
 │   │   ├── extractor_factory.py   # Factory: name → extractor instance
 │   │   └── embedding_database.py  # Save / load embedding store
 │   └── utils/              # Dataclasses, image helpers, file helpers
@@ -114,9 +115,10 @@ All settings are in [`config.py`](config.py). Override via environment variables
 | `FEWVISION_SECRET_KEY` | dev key | Flask session secret |
 | `FEWVISION_DEBUG` | `true` | Debug mode |
 | `FEWVISION_PORT` | `5005` | Server port |
-| `FEWVISION_FEATURE_EXTRACTION` | `true` | Run DINOv2 after augmentation |
-| `FEWVISION_EXTRACTOR` | `dinov2` | Extractor name (`dinov2`) |
-| `FEWVISION_DINOV2_VARIANT` | `dinov2_vits14` | Model variant (see table below) |
+| `FEWVISION_FEATURE_EXTRACTION` | `true` | Run feature extraction after augmentation |
+| `FEWVISION_EXTRACTOR` | `dinov2` | Extractor name (`dinov2`, `vit`) |
+| `FEWVISION_DINOV2_VARIANT` | `dinov2_vits14` | DINOv2 variant (`dinov2_vits14`, `dinov2_vitb14`) |
+| `FEWVISION_VIT_VARIANT` | `vit_b_16` | ViT variant (`vit_b_16`) |
 | `FEWVISION_BATCH_SIZE` | `32` | Images per forward pass |
 
 ### DINOv2 model variants
@@ -141,9 +143,10 @@ All settings are in [`config.py`](config.py). Override via environment variables
 | `modules/reporting/dataset_analytics.py` | Dataset-level statistics, distribution plots, duplicate detection |
 | `modules/pipeline/pipeline.py` | Orchestrates all 6 pipeline stages |
 | `modules/feature_extraction/base_extractor.py` | Abstract base class — all extractors implement this |
-| `modules/feature_extraction/preprocessing.py` | DINOv2-spec: resize 256 → crop 224 → ImageNet normalise |
+| `modules/feature_extraction/preprocessing.py` | Preprocessing transforms (DINOv2 spec) |
 | `modules/feature_extraction/dinov2_extractor.py` | DINOv2 via `torch.hub`, CLS-token embeddings, mini-batch inference |
-| `modules/feature_extraction/extractor_factory.py` | `get_extractor("dinov2")` → concrete extractor |
+| `modules/feature_extraction/vit_extractor.py` | ViT-B/16 via torchvision, CLS-token embeddings, mini-batch inference |
+| `modules/feature_extraction/extractor_factory.py` | `get_extractor()` → concrete extractor instance |
 | `modules/feature_extraction/embedding_database.py` | Saves `embeddings.npy`, `filenames.json`, `metadata.json`, `extractor_info.json` |
 
 ---
@@ -154,7 +157,7 @@ After each upload session, embeddings are saved to:
 
 ```
 data/embeddings/{session_id}/
-    embeddings.npy       # float32, shape (N, 384)
+    embeddings.npy       # float32, shape (N, D) where D is embedding_dim (e.g. 384 or 768)
     filenames.json       # ["img_aug_1.png", ...]
     metadata.json        # quality score, content score, augmentations per image
     extractor_info.json  # model variant, dim, preprocessing config
@@ -176,8 +179,71 @@ GET /api/embeddings/<session_id>/download
 from modules.feature_extraction.embedding_database import load_embeddings
 
 embeddings, filenames, metadata, extractor_info = load_embeddings(session_id)
-# embeddings.shape → (N, 384)
+# embeddings.shape → (N, D) where D is the extractor's embedding dimension
 ```
+
+---
+
+## Multiple Feature Extractors
+
+FewVision supports multiple independent feature extractors through the extractor factory. The selection is decoupled from the pipeline code and can be set via configuration.
+
+### Available Extractors
+1. **DINOv2 (Default)**
+   - **Registry Key**: `dinov2`
+   - **Variants**: `dinov2_vits14` (384-dim, default), `dinov2_vitb14` (768-dim), `dinov2_vitl14` (1024-dim)
+   - **Source**: Loaded via `torch.hub` from `facebookresearch/dinov2`.
+2. **ViT (Vision Transformer)**
+   - **Registry Key**: `vit`
+   - **Variants**: `vit_b_16` (768-dim)
+   - **Source**: Loaded via `torchvision.models` (weights: `ViT_B_16_Weights.IMAGENET1K_V1`).
+   - **Representation**: Pre-classification CLS token embedding (classification head replaced with `Identity`).
+   - **Input Preprocessing**:
+     - BGR to RGB color conversion
+     - Resize shortest side to `256` using **Bilinear** interpolation
+     - Center crop to `224 x 224`
+     - Scale values to `[0, 1]` and normalize using ImageNet mean/std statistics
+
+### Extractor Flow Architecture
+
+```
+Extractor Selection (FEWVISION_EXTRACTOR)
+         │
+         ▼
+extractor_factory.get_extractor()
+         │
+         ▼
+Selected Extractor Class (DINOv2 / ViT)
+         │
+         ▼
+Model Inference (without gradients, eval mode)
+         │
+         ▼
+Fixed-Dimensional Embedding Vector (D,)
+         │
+         ▼
+Embedding Database (data/embeddings/{session_id}/)
+```
+
+### Model Selection Example
+
+To run the pipeline with the **ViT** extractor, set the `FEWVISION_EXTRACTOR` environment variable:
+
+**For PowerShell:**
+```powershell
+$env:FEWVISION_EXTRACTOR="vit"
+python app.py
+```
+
+To revert back to the default **DINOv2** extractor:
+
+**For PowerShell:**
+```powershell
+Remove-Item Env:FEWVISION_EXTRACTOR -ErrorAction SilentlyContinue
+python app.py
+```
+
+Alternatively, you can set the variable directly in your environment block or configure the default in `config.py`.
 
 ---
 
