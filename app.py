@@ -16,10 +16,13 @@ GET  /results/<session_id>           Results summary page
 GET  /reports/<session_id>/<filename> Serve report images
 GET  /api/embeddings/<session_id>    Embedding database metadata (JSON)
 GET  /api/embeddings/<session_id>/download  Download embeddings.npy
+GET  /api/memory-bank/<session_id>   Memory Bank metadata (JSON)
 """
 
 import os
 import logging
+import datetime
+import uuid
 
 from flask import (
     Flask,
@@ -59,6 +62,8 @@ def create_app() -> Flask:
     ensure_dir(config.REPORTS_FOLDER)
     ensure_dir(config.LOGS_FOLDER)
     ensure_dir(config.TEMP_FOLDER)
+    ensure_dir(config.MEMORY_BANK_FOLDER)
+    ensure_dir(config.INFERENCE_FOLDER)
 
     # ---------------------------------------------------------------------------
     # Logging
@@ -83,7 +88,27 @@ def create_app() -> Flask:
     @app.route("/")
     def index():
         """Render the image upload page."""
-        return render_template("index.html")
+        from modules.anomaly_detection.memory_bank import list_memory_bank_sessions, load_memory_bank_summary
+        sessions = list_memory_bank_sessions()
+
+        active_session_id = session.get("session_id")
+        if not active_session_id and sessions:
+            active_session_id = sessions[-1]
+
+        mb_summary = None
+        if active_session_id and active_session_id in sessions:
+            try:
+                mb_summary = load_memory_bank_summary(active_session_id)
+                npy_path = os.path.join(config.MEMORY_BANK_FOLDER, active_session_id, "memory.npy")
+                if os.path.isfile(npy_path):
+                    mtime = os.path.getmtime(npy_path)
+                    mb_summary["created_time"] = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    mb_summary["created_time"] = "Unknown"
+            except Exception:
+                pass
+
+        return render_template("index.html", mb_summary=mb_summary)
 
     # ---------------------------------------------------------------------------
     # API: Upload + Run Pipeline
@@ -136,6 +161,9 @@ def create_app() -> Flask:
             session["marginal_count"] = dataset_result.marginal_count
             session["unsuitable_count"] = dataset_result.unsuitable_count
             session["report_dir"] = dataset_result.report_dir
+            session["memory_bank_count"] = dataset_result.memory_bank_count
+            session["memory_bank_dim"] = dataset_result.memory_bank_dim
+            session["memory_bank_path"] = dataset_result.memory_bank_path
 
             # Build per-image data for the dashboard
             images_data = []
@@ -183,6 +211,8 @@ def create_app() -> Flask:
         session_id : str
             Session identifier returned by the upload route.
         """
+        from modules.anomaly_detection.memory_bank import load_memory_bank_summary
+
         images_data = session.get("images_data", [])
         summary = {
             "session_id": session.get("session_id", session_id),
@@ -191,11 +221,68 @@ def create_app() -> Flask:
             "marginal_count": session.get("marginal_count", 0),
             "unsuitable_count": session.get("unsuitable_count", 0),
         }
+
+        # Attempt to load memory bank details from disk
+        mb_summary = None
+        try:
+            mb_summary = load_memory_bank_summary(session_id)
+        except Exception:
+            pass
+
+        if mb_summary and mb_summary.get("count", 0) > 0:
+            memory_bank = {
+                "count": mb_summary["count"],
+                "dim": mb_summary["embedding_dim"],
+                "path": mb_summary["location"],
+                "enabled": config.ENABLE_MEMORY_BANK,
+                "metric": mb_summary.get("similarity_metric", config.SIMILARITY_METRIC),
+                "status": "Ready",
+            }
+        else:
+            memory_bank = {
+                "count": session.get("memory_bank_count", 0),
+                "dim": session.get("memory_bank_dim", 0),
+                "path": session.get("memory_bank_path", ""),
+                "enabled": config.ENABLE_MEMORY_BANK,
+                "metric": config.SIMILARITY_METRIC,
+                "status": "Ready" if session.get("memory_bank_count", 0) > 0 else "Not built",
+            }
+
+        # Robustly calculate original and augmented image counts for Workflow 2 status card
+        original_count = summary["total_images"]
+        augmented_count = session.get("augmented_count", 0)
+        extractor_name = config.FEATURE_EXTRACTOR
+
+        try:
+            # Load metadata for extractor info
+            meta_path = os.path.join(config.MEMORY_BANK_FOLDER, session_id, "memory_metadata.json")
+            if os.path.isfile(meta_path):
+                with open(meta_path) as f:
+                    m_data = json.load(f)
+                extractor_name = m_data.get("extractor_info", {}).get("extractor_name", extractor_name)
+
+            # Look up metadata of embeddings to check precise counts
+            emb_meta_path = os.path.join(config.EMBEDDINGS_FOLDER, session_id, "metadata.json")
+            if os.path.isfile(emb_meta_path):
+                with open(emb_meta_path) as f:
+                    emb_meta = json.load(f)
+                augmented_count = len(emb_meta)
+                sources = {item.get("source_image") for item in emb_meta if item.get("source_image")}
+                if sources:
+                    original_count = len(sources)
+        except Exception:
+            pass
+
+        memory_bank["original_count"] = original_count
+        memory_bank["augmented_count"] = augmented_count
+        memory_bank["extractor"] = extractor_name
+
         return render_template(
             "dashboard.html",
             images=images_data,
             summary=summary,
             session_id=session_id,
+            memory_bank=memory_bank,
         )
 
     # ---------------------------------------------------------------------------
@@ -331,6 +418,173 @@ def create_app() -> Flask:
             as_attachment=True,
             download_name=f"fewvision_embeddings_{session_id}.npy",
             mimetype="application/octet-stream",
+        )
+
+    # ---------------------------------------------------------------------------
+    # Memory Bank API routes
+    # ---------------------------------------------------------------------------
+
+    @app.route("/api/memory-bank/<session_id>")
+    def memory_bank_info(session_id: str):
+        """Return Memory Bank metadata as JSON.
+
+        Parameters
+        ----------
+        session_id : str
+            Session identifier.
+
+        Returns
+        -------
+        JSON with keys: session_id, count, embedding_dim, similarity_metric,
+        top_k, npy_size_mb, location.
+        """
+        from modules.anomaly_detection.memory_bank import (
+            load_memory_bank_summary,
+            list_memory_bank_sessions,
+        )
+        sessions = list_memory_bank_sessions()
+        if session_id not in sessions:
+            return jsonify({
+                "error": f"No memory bank found for session '{session_id}'"
+            }), 404
+        summary = load_memory_bank_summary(session_id)
+        return jsonify(summary)
+
+    # ---------------------------------------------------------------------------
+    # Inference API routes
+    # ---------------------------------------------------------------------------
+
+    @app.route("/api/inspect", methods=["POST"])
+    def inspect():
+        """Accept test images, run the inference engine, return results."""
+        if not config.ENABLE_INFERENCE:
+            return jsonify({"error": "Inference pipeline is disabled."}), 400
+
+        if "files" not in request.files:
+            return jsonify({"error": "No test files uploaded."}), 400
+
+        files = request.files.getlist("files")
+        valid_files = [f for f in files if f and _allowed_file(f.filename)]
+        if not valid_files:
+            return jsonify({"error": "No valid test image files found."}), 400
+
+        if len(valid_files) > config.MAX_TEST_IMAGES:
+            return jsonify({
+                "error": f"Too many test files. Maximum is {config.MAX_TEST_IMAGES} images."
+            }), 400
+
+        # Get active session_id
+        session_id = request.form.get("session_id") or session.get("session_id")
+        if not session_id:
+            from modules.anomaly_detection.memory_bank import list_memory_bank_sessions
+            sessions = list_memory_bank_sessions()
+            if sessions:
+                session_id = sessions[-1]
+            else:
+                return jsonify({"error": "No active session or reference memory bank found. Build reference memory first."}), 400
+
+        from modules.inference.inference_engine import InferenceEngine
+
+        # Setup unique temp subdirectory for this run
+        run_id = uuid.uuid4().hex[:12]
+        temp_run_dir = ensure_dir(os.path.join(config.TEMP_FOLDER, "inference", session_id, run_id))
+
+        try:
+            # Save uploaded test files temporarily
+            saved_paths = []
+            for f in valid_files:
+                fname = secure_filename(f.filename)
+                save_path = os.path.join(temp_run_dir, fname)
+                f.save(save_path)
+                saved_paths.append(save_path)
+
+            app_logger.info("Initializing InferenceEngine for session %s", session_id)
+            engine = InferenceEngine(session_id)
+
+            app_logger.info("Running inspection batch for %d images", len(saved_paths))
+            results = engine.predict_batch(saved_paths)
+
+            # Save the run under data/inference/{session_id}/{run_id}/
+            summary = engine.save_run(results)
+
+            # Prepare list of dict results to return
+            results_dict = [r.to_dict() for r in results]
+
+            return jsonify({
+                "success": True,
+                "session_id": session_id,
+                "run_id": run_id,
+                "summary": summary,
+                "results": results_dict
+            })
+
+        except Exception as exc:
+            app_logger.error("Inference batch error for session %s: %s", session_id, exc, exc_info=True)
+            return jsonify({"error": str(exc)}), 500
+        finally:
+            # Cleanup temp run directory
+            try:
+                clear_dir(temp_run_dir)
+                os.rmdir(temp_run_dir)
+            except Exception:
+                pass
+
+    @app.route("/api/inference/<session_id>")
+    def inference_info(session_id: str):
+        """Return inference metadata/runs summary for a session."""
+        session_inf_dir = os.path.join(config.INFERENCE_FOLDER, session_id)
+        if not os.path.isdir(session_inf_dir):
+            return jsonify({"session_id": session_id, "runs": []})
+
+        runs = []
+        for d in sorted(os.listdir(session_inf_dir)):
+            summary_path = os.path.join(session_inf_dir, d, "inspection_summary.json")
+            if os.path.isfile(summary_path):
+                try:
+                    with open(summary_path) as f:
+                        runs.append(json.load(f))
+                except Exception:
+                    pass
+        return jsonify({
+            "session_id": session_id,
+            "runs": sorted(runs, key=lambda x: x.get("timestamp", ""), reverse=True)
+        })
+
+    @app.route("/api/inference/<session_id>/download")
+    def download_inference_results(session_id: str):
+        """Download results.json of the latest inference run for a session."""
+        session_inf_dir = os.path.join(config.INFERENCE_FOLDER, session_id)
+        if not os.path.isdir(session_inf_dir):
+            return jsonify({"error": "No inference runs found for this session."}), 404
+
+        # Find the directory with the latest summary
+        latest_run_id = None
+        latest_time = None
+        for d in os.listdir(session_inf_dir):
+            summary_path = os.path.join(session_inf_dir, d, "inspection_summary.json")
+            if os.path.isfile(summary_path):
+                try:
+                    with open(summary_path) as f:
+                        summary = json.load(f)
+                    ts = summary.get("timestamp", "")
+                    if latest_time is None or ts > latest_time:
+                        latest_time = ts
+                        latest_run_id = d
+                except Exception:
+                    pass
+
+        if not latest_run_id:
+            return jsonify({"error": "No valid runs found."}), 404
+
+        results_path = os.path.join(session_inf_dir, latest_run_id, "results.json")
+        if not os.path.isfile(results_path):
+            return jsonify({"error": "results.json not found for the latest run."}), 404
+
+        return send_file(
+            results_path,
+            as_attachment=True,
+            download_name=f"fewvision_inference_results_{session_id}_{latest_run_id}.json",
+            mimetype="application/json",
         )
 
     return app

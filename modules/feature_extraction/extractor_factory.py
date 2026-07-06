@@ -97,6 +97,10 @@ def get_extractor(
             name = "dinov2"
 
     name = name.lower().strip()
+    if "/" in name:
+        parts = name.split("/", 1)
+        name = parts[0]
+        kwargs.setdefault("model_variant", parts[1])
 
     if name not in REGISTRY:
         available = ", ".join(f'"{k}"' for k in REGISTRY)

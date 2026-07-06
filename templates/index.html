@@ -41,8 +41,60 @@
             <p class="hero-sub">Upload 5–20 industrial part images. We'll analyse quality, content, and generate an optimised augmented dataset for few-shot learning.</p>
         </section>
 
+        {% if mb_summary %}
+        <!-- Reference Memory Ready Card -->
+        <section class="ready-card" id="readyCard">
+            <div class="rc-header">
+                <div class="rc-icon">🛡️</div>
+                <div class="rc-title-group">
+                    <h2 class="rc-title">Reference Memory Status</h2>
+                    <div class="rc-badge">READY</div>
+                </div>
+            </div>
+
+            <div class="rc-metrics">
+                <div class="rc-metric">
+                    <span class="rc-label">Images</span>
+                    <span class="rc-value">{{ mb_summary.count }}</span>
+                </div>
+                <div class="rc-metric">
+                    <span class="rc-label">Embeddings</span>
+                    <span class="rc-value">{{ mb_summary.count }}</span>
+                </div>
+                <div class="rc-metric">
+                    <span class="rc-label">Extractor</span>
+                    <span class="rc-value font-mono">{{ mb_summary.extractor_info.get('extractor_name', 'dinov2') if mb_summary.extractor_info else 'dinov2' }}</span>
+                </div>
+                <div class="rc-metric">
+                    <span class="rc-label">Similarity Metric</span>
+                    <span class="rc-value font-mono">{{ mb_summary.similarity_metric }}</span>
+                </div>
+            </div>
+
+            <div class="rc-details">
+                <div class="rc-detail-item">
+                    <span class="rc-detail-label">Memory Bank Location:</span>
+                    <code class="rc-detail-val">{{ mb_summary.location }}</code>
+                </div>
+                <div class="rc-detail-item">
+                    <span class="rc-detail-label">Created Time:</span>
+                    <span class="rc-detail-val">{{ mb_summary.created_time }}</span>
+                </div>
+            </div>
+
+            <div class="rc-actions">
+                <a href="/dashboard/{{ mb_summary.session_id }}" class="btn-primary btn-xl">
+                    Proceed to Inspection
+                </a>
+                <button type="button" class="btn-link" id="showUploadBtn">
+                    Rebuild Reference Memory
+                </button>
+            </div>
+        </section>
+        {% endif %}
+
         <!-- Upload card -->
-        <section class="upload-card" aria-label="Image upload">
+        <section class="upload-card" aria-label="Image upload" {% if mb_summary %}style="display:none"{% endif %} id="uploadSection">
 
             <!-- Dropzone -->
             <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Drop images here or click to browse">
@@ -142,5 +194,18 @@
     </main>
 
     <script src="/static/js/upload.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const showUploadBtn = document.getElementById('showUploadBtn');
+            const readyCard = document.getElementById('readyCard');
+            const uploadSection = document.getElementById('uploadSection');
+            if (showUploadBtn && readyCard && uploadSection) {
+                showUploadBtn.addEventListener('click', () => {
+                    readyCard.style.display = 'none';
+                    uploadSection.style.display = 'block';
+                });
+            }
+        });
+    </script>
 </body>
 </html>

@@ -44,9 +44,13 @@ data/reports/
 data/logs/
 data/temp/
 data/embeddings/
+data/memory_bank/
+data/inference/
 
 # Keep the data/ directory structure in git
 !data/.gitkeep
+!data/memory_bank/.gitkeep
+!data/inference/.gitkeep
 
 # Legacy root-level data directories (from old structure)
 uploads/

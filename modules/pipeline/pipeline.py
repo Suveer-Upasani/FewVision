@@ -4,20 +4,22 @@
 This module is the heart of the application. It coordinates every stage of
 the preprocessing workflow:
 
-    1. Image Quality Analysis     → :mod:`modules.quality.quality`
-    2. Content Analysis           → :mod:`modules.content.content_analysis`
-    3. Suitability Scoring        → computed here
+    1. Image Quality Analysis       → :mod:`modules.quality.quality`
+    2. Content Analysis             → :mod:`modules.content.content_analysis`
+    3. Suitability Scoring          → computed here
     4. Adaptive Augmentation Policy → :mod:`modules.augmentation.adaptive_policy`
-    5. Report Generation          → :mod:`modules.reporting.report_generator`
-    6. Batch Augmentation         → :mod:`modules.augmentation.augmentations`
-    7. Dataset Analytics          → :mod:`modules.reporting.dataset_analytics`
+    5. Report Generation            → :mod:`modules.reporting.report_generator`
+    6. Batch Augmentation           → :mod:`modules.augmentation.augmentations`
+    7. Dataset Analytics            → :mod:`modules.reporting.dataset_analytics`
+    8. Feature Extraction           → :mod:`modules.feature_extraction`
+    9. Memory Bank Construction     → :mod:`modules.anomaly_detection.memory_bank`
 
 The pipeline intentionally contains **no Flask code** and **no ML training
 logic**. It is a pure Python orchestrator that can be called from the Flask
 app, a CLI, or tests.
 
-Future extensions (feature extraction, prototypical networks, REST API) can
-be added by extending :func:`process_dataset` without touching any other module.
+Future extensions (PatchCore, PaDiM, grading) can be added by extending
+:func:`process_dataset` without touching any other module.
 """
 
 import os
@@ -362,6 +364,33 @@ def process_dataset(
             )
             # Non-fatal: pipeline continues, embedding fields stay empty
 
+    # --- Step 7: Memory Bank construction ---
+    memory_bank_path: str = ""
+    memory_bank_count: int = 0
+    memory_bank_dim: int = 0
+
+    if config.ENABLE_MEMORY_BANK and embedding_count > 0:
+        try:
+            from modules.anomaly_detection.memory_bank import MemoryBank
+
+            bank = MemoryBank()
+            bank.build(session_id)
+            memory_bank_path = bank.save(session_id)
+            memory_bank_count = bank.size()
+            memory_bank_dim = bank.embedding_dimension()
+
+            logger.info(
+                "Memory Bank created successfully — %d embeddings, dim=%d, path=%s",
+                memory_bank_count, memory_bank_dim, memory_bank_path,
+            )
+
+        except Exception as exc:
+            logger.error(
+                "Memory Bank construction failed for session %s: %s",
+                session_id, exc, exc_info=True,
+            )
+            # Non-fatal: pipeline continues, memory bank fields stay empty
+
     return DatasetResult(
         results=results,
         analytics=analytics,
@@ -375,6 +404,9 @@ def process_dataset(
         unsuitable_count=unsuitable,
         embedding_path=embedding_path,
         embedding_count=embedding_count,
+        memory_bank_path=memory_bank_path,
+        memory_bank_count=memory_bank_count,
+        memory_bank_dim=memory_bank_dim,
     )
 
 
