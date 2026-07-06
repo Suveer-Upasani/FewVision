@@ -48,7 +48,7 @@ MAX_IMAGES = 50
 FEATURE_EXTRACTION_ENABLED = os.environ.get("FEWVISION_FEATURE_EXTRACTION", "true").lower() == "true"
 
 # Extractor to use. See modules/feature_extraction/extractor_factory.py REGISTRY.
-# Options: "dinov2"  (future: "clip", "resnet50", "vit")
+# Options: "dinov2", "resnet50", "vit"  (future: "clip")
 FEATURE_EXTRACTOR = os.environ.get("FEWVISION_EXTRACTOR", "dinov2")
 
 # DINOv2 model variant. Options:

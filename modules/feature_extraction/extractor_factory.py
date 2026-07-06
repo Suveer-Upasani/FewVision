@@ -48,12 +48,17 @@ def _vit_class() -> type[BaseExtractor]:
     return ViTExtractor
 
 
+def _resnet50_class() -> type[BaseExtractor]:
+    from modules.feature_extraction.resnet_extractor import ResNet50Extractor
+    return ResNet50Extractor
+
+
 REGISTRY: dict[str, callable] = {
     "dinov2": _dinov2_class,
     "vit": _vit_class,
+    "resnet50": _resnet50_class,
     # Future extractors — uncomment and implement when ready:
     # "clip":     lambda: _import("modules.feature_extraction.clip_extractor", "CLIPExtractor"),
-    # "resnet50": lambda: _import("modules.feature_extraction.resnet_extractor", "ResNet50Extractor"),
 }
 
 

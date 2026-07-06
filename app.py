@@ -19,6 +19,8 @@ GET  /api/embeddings/<session_id>/download  Download embeddings.npy
 GET  /api/memory-bank/<session_id>   Memory Bank metadata (JSON)
 """
 
+import io
+import json
 import os
 import logging
 import datetime
@@ -39,6 +41,7 @@ from werkzeug.utils import secure_filename
 import config
 from modules.utils.file_utils import ensure_dir, new_session_id, clear_dir
 from modules.pipeline.pipeline import process_dataset, create_augmented_zip
+from modules.reporting.pdf_report import generate_pdf_report
 
 # ---------------------------------------------------------------------------
 # Application setup
@@ -586,6 +589,52 @@ def create_app() -> Flask:
             download_name=f"fewvision_inference_results_{session_id}_{latest_run_id}.json",
             mimetype="application/json",
         )
+
+    @app.route("/api/inference/<session_id>/report")
+    def download_inference_pdf(session_id: str):
+        """Generate and download a detailed PDF inspection report."""
+        session_inf_dir = os.path.join(config.INFERENCE_FOLDER, session_id)
+        if not os.path.isdir(session_inf_dir):
+            return jsonify({"error": "No inference runs found for this session."}), 404
+
+        # Find latest run
+        latest_run_id = None
+        latest_time = None
+        for d in os.listdir(session_inf_dir):
+            summary_path = os.path.join(session_inf_dir, d, "inspection_summary.json")
+            if os.path.isfile(summary_path):
+                try:
+                    with open(summary_path) as f:
+                        summary = json.load(f)
+                    ts = summary.get("timestamp", "")
+                    if latest_time is None or ts > latest_time:
+                        latest_time = ts
+                        latest_run_id = d
+                except Exception:
+                    pass
+
+        if not latest_run_id:
+            return jsonify({"error": "No valid runs found."}), 404
+
+        run_dir = os.path.join(session_inf_dir, latest_run_id)
+        results_path = os.path.join(run_dir, "results.json")
+        summary_path = os.path.join(run_dir, "inspection_summary.json")
+
+        if not os.path.isfile(results_path) or not os.path.isfile(summary_path):
+            return jsonify({"error": "Run data not found."}), 404
+
+        try:
+            pdf_path = os.path.join(run_dir, "inspection_report.pdf")
+            generate_pdf_report(results_path, summary_path, pdf_path)
+            return send_file(
+                pdf_path,
+                as_attachment=True,
+                download_name=f"fewvision_report_{session_id}_{latest_run_id}.pdf",
+                mimetype="application/pdf",
+            )
+        except Exception as exc:
+            logging.getLogger("fewvision.app").exception("PDF generation failed")
+            return jsonify({"error": f"PDF generation failed: {exc}"}), 500
 
     return app
 
