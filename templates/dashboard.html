@@ -156,6 +156,161 @@
             {% endif %}
         </section>
 
+        <!-- Reference Memory Status Card -->
+        {% if memory_bank %}
+        <section class="memory-bank-section" aria-label="Reference Memory status" id="refMemorySection">
+            <div class="mb-card">
+                <div class="mb-card-header">
+                    <div class="mb-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" width="22" height="22">
+                            <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+                            <path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            <path d="M6 8h.01M6 11h.01M9 8h9M9 11h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="mb-title-group">
+                        <h2 class="mb-title">Reference Memory Status</h2>
+                        <p class="mb-subtitle">Optimised normal reference store for few-shot learning</p>
+                    </div>
+                    <div class="mb-status-badge mb-status-{{ memory_bank.status | lower | replace(' ', '-') }}">
+                        {% if memory_bank.status == 'Ready' %}
+                            <span class="mb-status-dot"></span> READY
+                        {% else %}
+                            <span class="mb-status-dot mb-status-dot-inactive"></span> {{ memory_bank.status }}
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="mb-metrics">
+                    <div class="mb-metric">
+                        <span class="mb-metric-label">Original Images</span>
+                        <span class="mb-metric-value">{{ memory_bank.original_count }}</span>
+                    </div>
+                    <div class="mb-metric">
+                        <span class="mb-metric-label">Augmented Images</span>
+                        <span class="mb-metric-value">{{ memory_bank.augmented_count }}</span>
+                    </div>
+                    <div class="mb-metric">
+                        <span class="mb-metric-label">Embedding Count</span>
+                        <span class="mb-metric-value">{{ memory_bank.count }}</span>
+                    </div>
+                    <div class="mb-metric">
+                        <span class="mb-metric-label">Dimension</span>
+                        <span class="mb-metric-value">{{ memory_bank.dim }}</span>
+                    </div>
+                    <div class="mb-metric text-truncate">
+                        <span class="mb-metric-label">Extractor</span>
+                        <span class="mb-metric-value mb-metric-badge">{{ memory_bank.extractor }}</span>
+                    </div>
+                    <div class="mb-metric">
+                        <span class="mb-metric-label">Similarity Metric</span>
+                        <span class="mb-metric-value mb-metric-badge">{{ memory_bank.metric }}</span>
+                    </div>
+                </div>
+
+                {% if memory_bank.path %}
+                <div class="mb-location">
+                    <span class="mb-location-label">Memory Bank Location</span>
+                    <code class="mb-location-path">{{ memory_bank.path }}</code>
+                </div>
+                {% endif %}
+
+                {% if memory_bank.status == 'Ready' %}
+                <p class="mb-success-msg">
+                    ✅ Reference Memory Bank is active and ready to perform product inspections.
+                </p>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- Inspect Product Section -->
+        {% if memory_bank and memory_bank.status == 'Ready' %}
+        <section class="inspect-section" aria-label="Product inspection">
+            <div class="inspect-card">
+                <div class="inspect-header">
+                    <h2>Inspect Product</h2>
+                    <p>Upload test images to evaluate them against the reference memory bank for anomalies.</p>
+                </div>
+
+                <!-- Test Image Dropzone -->
+                <div id="testDropzone" class="test-dropzone" role="button" tabindex="0" aria-label="Drop test images here or click to browse">
+                    <div class="drop-idle" id="testDropIdle">
+                        <svg class="drop-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true" width="48" height="48">
+                            <circle cx="32" cy="32" r="30" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.45"/>
+                            <path d="M32 42V26M24 34l8-8 8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <h3 class="drop-title">Drop Test Images Here</h3>
+                        <p class="drop-hint">or <button type="button" class="link-btn" id="testBrowseBtn">browse files</button></p>
+                        <p class="drop-formats">Supported: JPG, PNG, JPEG, BMP &nbsp;·&nbsp; Up to {{ config.MAX_TEST_IMAGES }} images</p>
+                    </div>
+                    <div class="drop-active-overlay" id="testDropOverlay" aria-hidden="true">
+                        <p>Release to add test images</p>
+                    </div>
+                    <input type="file" id="testFileInput" accept="image/*" multiple style="display:none" aria-hidden="true">
+                </div>
+
+                <!-- Selected files preview -->
+                <div id="testPreviewSection" class="test-preview-section hidden">
+                    <div class="preview-header">
+                        <span id="testPreviewCount" class="preview-count">0 test images selected</span>
+                        <button type="button" class="btn-ghost" id="testClearBtn">Clear all</button>
+                    </div>
+                    <div id="testPreviewGrid" class="test-preview-grid" role="list"></div>
+                </div>
+
+                <!-- Action Button -->
+                <div id="testActionSection" class="test-action-section hidden">
+                    <button type="button" class="btn-primary btn-xl" id="inspectBtn" data-session="{{ session_id }}">
+                        <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true">
+                            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Inspect Product
+                    </button>
+                </div>
+
+                <!-- Progress State -->
+                <div id="inspectProgress" class="inspect-progress hidden" role="status" aria-live="polite">
+                    <div class="spinner-small" aria-hidden="true"></div>
+                    <p>Running anomaly detection & reference matching...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Inspection Results Summary Section -->
+        <section class="results-section hidden" id="inspectionResultsSection" aria-label="Inspection results">
+            <div class="results-summary-card">
+                <div class="results-summary-header">
+                    <h2>Inspection Summary</h2>
+                    <div class="results-summary-chips">
+                        <div class="summary-chip chip-normal">
+                            <span class="chip-val" id="summaryNormalCount">0</span>
+                            <span class="chip-lbl">Normal</span>
+                        </div>
+                        <div class="summary-chip chip-suspicious">
+                            <span class="chip-val" id="summarySuspiciousCount">0</span>
+                            <span class="chip-lbl">Suspicious</span>
+                        </div>
+                        <div class="summary-chip chip-anomalous">
+                            <span class="chip-val" id="summaryAnomalousCount">0</span>
+                            <span class="chip-lbl">Anomalous</span>
+                        </div>
+                    </div>
+                    <div class="results-download-actions">
+                        <a href="/api/inference/{{ session_id }}/download" class="btn-secondary" id="btnDownloadResults" download>
+                            Download results.json
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Inspection Results List -->
+                <div class="results-list" id="inspectionResultsList">
+                    <!-- Dynamic rendering by JS -->
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
         <!-- Generate CTA -->
         {% if images %}
         <section class="generate-cta" aria-label="Generate augmented dataset">

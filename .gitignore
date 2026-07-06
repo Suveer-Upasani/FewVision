@@ -36,13 +36,21 @@ env/
 .LSOverride
 
 # ============================================================
-# Generated Data — NEVER commit these
+# Generated Runtime Data — NEVER commit these
 # ============================================================
 data/uploads/
 data/augmented/
 data/reports/
 data/logs/
 data/temp/
+data/embeddings/
+data/memory_bank/
+data/inference/
+
+# Keep the data/ directory structure in git
+!data/.gitkeep
+!data/memory_bank/.gitkeep
+!data/inference/.gitkeep
 
 # Legacy root-level data directories (from old structure)
 uploads/
@@ -50,14 +58,29 @@ augmented_dataset/
 reports/
 logs/
 
-# Generated numpy files
+# ============================================================
+# Model weights & ML artefacts
+# ============================================================
+# Generated numpy arrays
 *.npy
 *.npz
+
+# PyTorch checkpoints
+*.pth
+*.pt
+*.ckpt
+
+# ============================================================
+# DINOv2 / torch.hub cache
+# ============================================================
+# These live in ~/.cache/torch/hub — no need to ignore here,
+# but listed for reference. Do NOT commit model weights.
 
 # ============================================================
 # Test datasets and sample images
 # ============================================================
 Tiles_dataset/
+images/
 
 # ============================================================
 # Test / Coverage
@@ -78,7 +101,12 @@ coverage.xml
 *.log
 
 # ============================================================
+# Jupyter
+# ============================================================
+.ipynb_checkpoints/
+*.ipynb
+
+# ============================================================
 # Misc
 # ============================================================
 pipeline.png
-.ipynb_checkpoints/
