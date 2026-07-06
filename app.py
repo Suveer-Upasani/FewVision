@@ -152,9 +152,12 @@ def create_app() -> Flask:
                 filename = secure_filename(f.filename)
                 f.save(os.path.join(upload_dir, filename))
 
+            # Get selected extractor from form, default to None (will use config)
+            extractor_name = request.form.get("extractor")
+
             # Run the full pipeline
-            app_logger.info("Starting pipeline for session %s (%d images)", sid, len(valid_files))
-            dataset_result = process_dataset(upload_dir, session_id=sid)
+            app_logger.info("Starting pipeline for session %s (%d images, extractor=%s)", sid, len(valid_files), extractor_name or config.FEATURE_EXTRACTOR)
+            dataset_result = process_dataset(upload_dir, session_id=sid, extractor_name=extractor_name)
 
             # Serialise results for the session store
             session["session_id"] = sid

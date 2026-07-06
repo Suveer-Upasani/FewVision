@@ -126,6 +126,14 @@
 
             <!-- Action -->
             <div id="actionBar" class="action-bar hidden">
+                <div class="extractor-selector">
+                    <label for="extractorSelect">Feature Extractor:</label>
+                    <select id="extractorSelect" class="form-select" name="extractor">
+                        <option value="dinov2" selected>DINOv2 (Self-supervised ViT - Default)</option>
+                        <option value="resnet50">ResNet50 (Supervised CNN - Fast)</option>
+                        <option value="vit">ViT (Supervised Vision Transformer)</option>
+                    </select>
+                </div>
                 <button type="button" class="btn-primary" id="analyzeBtn">
                     <svg viewBox="0 0 20 20" fill="none" width="18" aria-hidden="true">
                         <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
