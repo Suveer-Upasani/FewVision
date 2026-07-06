@@ -106,6 +106,10 @@ def get_extractor(
         parts = name.split("/", 1)
         name = parts[0]
         kwargs.setdefault("model_variant", parts[1])
+        
+    # Backwards compatibility fix for memory banks saved with the "resnet/resnet50" bug
+    if name == "resnet":
+        name = "resnet50"
 
     if name not in REGISTRY:
         available = ", ".join(f'"{k}"' for k in REGISTRY)

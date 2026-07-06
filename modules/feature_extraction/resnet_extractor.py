@@ -101,7 +101,7 @@ class ResNet50Extractor(BaseExtractor):
 
     @property
     def extractor_name(self) -> str:
-        return f"resnet/{self._model_variant}"
+        return f"resnet50/{self._model_variant}"
 
     @property
     def info(self) -> dict:
