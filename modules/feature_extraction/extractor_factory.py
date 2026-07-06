@@ -136,6 +136,15 @@ def get_extractor(
             )
         except ImportError:
             pass
+    elif name == "resnet50" and "model_variant" not in kwargs:
+        try:
+            import config as _cfg
+            kwargs.setdefault(
+                "model_variant",
+                getattr(_cfg, "RESNET50_MODEL_VARIANT", "resnet50"),
+            )
+        except ImportError:
+            pass
 
     extractor = cls(**kwargs)
     logger.info("Created extractor: %s", extractor)
