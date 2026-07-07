@@ -142,6 +142,11 @@
         const formData = new FormData();
         selectedFiles.forEach(file => formData.append('files', file));
 
+        const extractorSelect = document.getElementById('extractorSelect');
+        if (extractorSelect) {
+            formData.append('extractor', extractorSelect.value);
+        }
+
         // Animate processing steps
         let stepIdx = 0;
         const stepInterval = setInterval(() => {

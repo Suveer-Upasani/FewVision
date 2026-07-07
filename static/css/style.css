@@ -398,8 +398,39 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85em; }
 .action-bar {
     margin-top: 28px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     animation: fadeIn 0.4s var(--ease-out);
+}
+
+.extractor-selector {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.9rem;
+    color: var(--clr-text-muted);
+}
+
+.form-select {
+    background: var(--clr-surface-high);
+    border: 1px solid var(--clr-border);
+    color: var(--clr-text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.form-select:hover {
+    border-color: var(--clr-primary-light);
+}
+
+.form-select:focus {
+    border-color: var(--clr-primary);
+    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.2);
 }
 
 /* ---------------------------------------------------------

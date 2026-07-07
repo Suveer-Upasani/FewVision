@@ -43,23 +43,39 @@ MAX_IMAGES = 50
 # ---------------------------------------------------------------------------
 # Feature Extraction
 # ---------------------------------------------------------------------------
-# Set to True to run DINOv2 feature extraction after augmentation.
-# On first run the model weights (~85 MB) are downloaded automatically.
+# Set to True to run feature extraction after augmentation.
+# On first run, model weights are downloaded automatically.
 FEATURE_EXTRACTION_ENABLED = os.environ.get("FEWVISION_FEATURE_EXTRACTION", "true").lower() == "true"
 
-# Extractor to use. See modules/feature_extraction/extractor_factory.py REGISTRY.
-# Options: "dinov2"  (future: "clip", "resnet50", "vit")
+# ---------------------------------------------------------------------------
+# Active Extractor — change ONE line to switch between models
+# ---------------------------------------------------------------------------
+# "dinov2"  — Self-supervised ViT (Meta AI). Best generalisation. (default)
+# "vit"     — Supervised ViT-B/16 (torchvision). Strong ImageNet baseline.
+# "resnet50"— Supervised ResNet50 (torchvision). 2048-dim, fast on CPU.
+#
+# Can also be set via environment variable:
+#   $env:FEWVISION_EXTRACTOR = "resnet50"; python app.py
 FEATURE_EXTRACTOR = os.environ.get("FEWVISION_EXTRACTOR", "dinov2")
 
-# DINOv2 model variant. Options:
-#   dinov2_vits14 — 384-dim, fast (default)
-#   dinov2_vitb14 — 768-dim, better quality
-#   dinov2_vitl14 — 1024-dim, best quality (slow)
+# ---------------------------------------------------------------------------
+# Per-Extractor Variant Configuration
+# ---------------------------------------------------------------------------
+
+# --- DINOv2 ---
+# Variants:  dinov2_vits14 (384-dim, fast, default)
+#            dinov2_vitb14 (768-dim, better quality)
+#            dinov2_vitl14 (1024-dim, best quality, slow)
+#            dinov2_vitg14 (1536-dim, highest quality, very slow)
 DINOV2_MODEL_VARIANT = os.environ.get("FEWVISION_DINOV2_VARIANT", "dinov2_vits14")
 
-# ViT model variant. Options:
-#   vit_b_16 — 768-dim, standard ImageNet-1K pretrained ViT (default)
+# --- ViT (Vision Transformer) ---
+# Variants:  vit_b_16 (768-dim, ImageNet-1K pretrained, default)
 VIT_MODEL_VARIANT = os.environ.get("FEWVISION_VIT_VARIANT", "vit_b_16")
+
+# --- ResNet50 ---
+# Variants:  resnet50 (2048-dim, ImageNet-1K pretrained, default)
+RESNET50_MODEL_VARIANT = os.environ.get("FEWVISION_RESNET50_VARIANT", "resnet50")
 
 # Number of images per forward pass (increase if GPU memory allows)
 EXTRACTION_BATCH_SIZE = int(os.environ.get("FEWVISION_BATCH_SIZE", "32"))

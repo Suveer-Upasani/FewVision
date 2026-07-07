@@ -48,12 +48,17 @@ def _vit_class() -> type[BaseExtractor]:
     return ViTExtractor
 
 
+def _resnet50_class() -> type[BaseExtractor]:
+    from modules.feature_extraction.resnet_extractor import ResNet50Extractor
+    return ResNet50Extractor
+
+
 REGISTRY: dict[str, callable] = {
     "dinov2": _dinov2_class,
     "vit": _vit_class,
+    "resnet50": _resnet50_class,
     # Future extractors — uncomment and implement when ready:
     # "clip":     lambda: _import("modules.feature_extraction.clip_extractor", "CLIPExtractor"),
-    # "resnet50": lambda: _import("modules.feature_extraction.resnet_extractor", "ResNet50Extractor"),
 }
 
 
@@ -101,6 +106,10 @@ def get_extractor(
         parts = name.split("/", 1)
         name = parts[0]
         kwargs.setdefault("model_variant", parts[1])
+        
+    # Backwards compatibility fix for memory banks saved with the "resnet/resnet50" bug
+    if name == "resnet":
+        name = "resnet50"
 
     if name not in REGISTRY:
         available = ", ".join(f'"{k}"' for k in REGISTRY)
@@ -128,6 +137,15 @@ def get_extractor(
             kwargs.setdefault(
                 "model_variant",
                 getattr(_cfg, "VIT_MODEL_VARIANT", "vit_b_16"),
+            )
+        except ImportError:
+            pass
+    elif name == "resnet50" and "model_variant" not in kwargs:
+        try:
+            import config as _cfg
+            kwargs.setdefault(
+                "model_variant",
+                getattr(_cfg, "RESNET50_MODEL_VARIANT", "resnet50"),
             )
         except ImportError:
             pass

@@ -215,6 +215,7 @@ def _build_embedding_metadata(
 def process_dataset(
     upload_dir: str,
     session_id: str | None = None,
+    extractor_name: str | None = None,
 ) -> DatasetResult:
     """Run the full dataset preprocessing pipeline.
 
@@ -232,6 +233,8 @@ def process_dataset(
         Directory containing the uploaded images.
     session_id : str, optional
         Session identifier. A new one is generated if not provided.
+    extractor_name : str, optional
+        Name of the feature extractor to use (e.g., "resnet50"). If None, uses config.FEATURE_EXTRACTOR.
 
     Returns
     -------
@@ -320,7 +323,8 @@ def process_dataset(
                 logger.warning("No augmented images found in %s — skipping extraction.", aug_dir)
             else:
                 # Load model once — reused for entire session
-                extractor = get_extractor(config.FEATURE_EXTRACTOR)
+                ext_name = extractor_name or config.FEATURE_EXTRACTOR
+                extractor = get_extractor(ext_name)
                 extractor.load_model()
 
                 # Load images as BGR numpy arrays

@@ -1,63 +1,47 @@
 # models/feature_extraction.py
-"""Feature extraction module — future scope.
+"""Feature extraction — redirect stub.
 
-This module is a stub placeholder for future implementation.
+The live feature extraction implementation lives in
+``modules/feature_extraction/``.  This file is kept for historical
+reference only and does **not** contain runnable code.
 
-Planned implementations:
-  - ResNet50 feature extraction (torchvision)
-  - Vision Transformer (ViT) embeddings
-  - CLIP embeddings (openai/clip)
+Implemented extractors
+----------------------
++------------+--------------------------------------------------+---------+
+| Identifier | Class                                            | Dim     |
++============+==================================================+=========+
+| dinov2     | modules.feature_extraction.dinov2_extractor      | 384–    |
+|            |   .DINOv2Extractor                               | 1536    |
++------------+--------------------------------------------------+---------+
+| vit        | modules.feature_extraction.vit_extractor         | 768     |
+|            |   .ViTExtractor                                  |         |
++------------+--------------------------------------------------+---------+
+| resnet50   | modules.feature_extraction.resnet_extractor      | 2048    |
+|            |   .ResNet50Extractor                             |         |
++------------+--------------------------------------------------+---------+
 
-Usage (future):
-    from models.feature_extraction import FeatureExtractor
-    extractor = FeatureExtractor(backbone='resnet50')
-    features = extractor.extract(image_dir)
+Usage (all pipeline code)
+-------------------------
+    from modules.feature_extraction import get_extractor
 
-Note: Requires ``torch`` and ``torchvision`` which are listed as optional
-dependencies in requirements.txt. Install with:
-    pip install torch torchvision
+    extractor = get_extractor()          # reads config.FEATURE_EXTRACTOR
+    extractor = get_extractor("resnet50")  # explicit name
+    extractor = get_extractor("dinov2", model_variant="dinov2_vitb14")
+
+    extractor.load_model()               # downloads weights on first run
+    embedding = extractor.extract(bgr_image)  # np.ndarray shape (D,)
+
+Switching extractors
+--------------------
+Change ONE line in ``config.py``:
+
+    FEATURE_EXTRACTOR = "dinov2"    # self-supervised ViT, 384-dim (default)
+    FEATURE_EXTRACTOR = "vit"       # supervised ViT-B/16, 768-dim
+    FEATURE_EXTRACTOR = "resnet50"  # supervised ResNet50, 2048-dim
+
+Or set the environment variable without changing any file:
+
+    $env:FEWVISION_EXTRACTOR = "resnet50"; python app.py
+
+No pipeline code changes are ever needed when switching extractors.
 """
-
-from __future__ import annotations
-
-
-class FeatureExtractor:
-    """Placeholder for future feature extraction implementations.
-
-    Parameters
-    ----------
-    backbone : str
-        Backbone architecture. One of ``"resnet50"``, ``"vit"``, ``"clip"``.
-    device : str
-        PyTorch device string (e.g. ``"cpu"``, ``"cuda"``).
-    """
-
-    def __init__(self, backbone: str = "resnet50", device: str = "cpu"):
-        self.backbone = backbone
-        self.device = device
-        raise NotImplementedError(
-            "Feature extraction is not yet implemented. "
-            "This module is a stub for future development."
-        )
-
-    def extract(self, image_dir: str) -> tuple:
-        """Extract feature vectors from all images in *image_dir*.
-
-        Parameters
-        ----------
-        image_dir : str
-            Directory containing images to process.
-
-        Returns
-        -------
-        tuple[np.ndarray, list[str]]
-            ``(features, labels)`` arrays.
-        """
-        raise NotImplementedError
-
-
-def run(image_dir: str) -> None:
-    """CLI entry point (future implementation)."""
-    raise NotImplementedError(
-        "Feature extraction pipeline not yet implemented."
-    )

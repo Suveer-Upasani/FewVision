@@ -23,3 +23,6 @@ Werkzeug>=3.0.0
 # Weights are downloaded automatically on first run (~85 MB for dinov2_vits14)
 torch>=2.0.0
 torchvision>=0.15.0
+
+# --- PDF Report Generation ---
+reportlab>=4.0.0
