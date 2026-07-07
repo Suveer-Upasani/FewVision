@@ -1995,3 +1995,204 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85em; }
     .results-summary-header { flex-direction: column; align-items: flex-start; }
 }
 
+/* ---------------------------------------------------------
+   19. PatchCore Anomaly Localization Panel
+   --------------------------------------------------------- */
+.irc-patchcore-panel {
+    margin-top: 24px;
+    padding: 20px;
+    background: hsla(240, 14%, 8%, 0.4);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.irc-patchcore-header {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--clr-text);
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    opacity: 0.85;
+}
+
+.irc-patchcore-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+@media (max-width: 640px) {
+    .irc-patchcore-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.irc-pc-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.irc-pc-lbl {
+    font-size: 0.8rem;
+    color: var(--clr-text-muted);
+    font-weight: 500;
+}
+
+.irc-pc-img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--clr-border);
+    background: black;
+    transition: transform 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out);
+}
+
+.irc-pc-img:hover {
+    transform: scale(1.03);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    z-index: 10;
+}
+
+.irc-pc-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.irc-pc-metric {
+    background: hsla(240, 14%, 6%, 0.3);
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid hsla(240, 10%, 20%, 0.4);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.irc-pc-metric.cell-full {
+    grid-column: span 2;
+}
+
+@media (max-width: 640px) {
+    .irc-pc-metric.cell-full {
+        grid-column: span 1;
+    }
+    .irc-pc-metrics {
+        grid-template-columns: 1fr;
+    }
+}
+
+.irc-pc-metric-lbl {
+    font-size: 0.85rem;
+    color: var(--clr-text-muted);
+}
+
+.irc-pc-metric-val {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--clr-text);
+}
+
+.irc-patch-matches-details {
+    margin-top: 12px;
+}
+
+.irc-patch-matches-toggle {
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--clr-primary-lt);
+    user-select: none;
+    font-weight: 500;
+    outline: none;
+    padding: 4px 0;
+}
+
+.irc-patch-matches-toggle:hover {
+    color: var(--clr-primary);
+}
+
+.irc-patch-matches-list {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.patch-match-row {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: hsla(240, 12%, 14%, 0.3);
+    border: 1px solid hsla(240, 10%, 22%, 0.3);
+    border-radius: 6px;
+    font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+    .patch-match-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+}
+
+.pm-rank {
+    font-weight: 700;
+    color: var(--clr-text-dim);
+}
+
+.pm-coords {
+    font-weight: 600;
+    color: var(--clr-text);
+}
+
+.pm-values {
+    display: flex;
+    gap: 10px;
+    justify-self: end;
+}
+
+@media (max-width: 640px) {
+    .pm-values {
+        justify-self: start;
+    }
+}
+
+.pm-dist {
+    color: var(--clr-text-dim);
+}
+
+.pm-sim {
+    color: var(--clr-primary-lt);
+    font-weight: 600;
+}
+
+.pm-ref-info {
+    grid-column: span 3;
+    font-size: 0.75rem;
+    color: var(--clr-text-muted);
+    border-top: 1px solid hsla(240, 10%, 22%, 0.2);
+    padding-top: 4px;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+    .pm-ref-info {
+        grid-column: span 1;
+    }
+}
+
+

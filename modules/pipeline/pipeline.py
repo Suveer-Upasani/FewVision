@@ -395,6 +395,28 @@ def process_dataset(
             )
             # Non-fatal: pipeline continues, memory bank fields stay empty
 
+    # --- Step 8: PatchCore Memory Bank construction ---
+    if getattr(config, "PATCHCORE_ENABLED", True) and embedding_count > 0:
+        try:
+            logger.info("Starting PatchCore Memory Bank construction for session %s …", session_id)
+            from modules.patchcore.patch_memory_bank import PatchMemoryBank
+            from modules.patchcore.patch_extractor import PatchExtractor
+
+            # Re-use the extractor if it's DINOv2 to save memory / startup time
+            patch_extractor = None
+            if "extractor" in locals() and extractor and extractor.extractor_name.startswith("dinov2"):
+                patch_extractor = PatchExtractor(extractor=extractor, patch_size=config.PATCH_SIZE)
+
+            patch_bank = PatchMemoryBank(extractor=patch_extractor, patch_size=config.PATCH_SIZE)
+            patch_bank.build(session_id)
+            patch_bank.save(session_id)
+            logger.info("PatchCore Memory Bank created successfully.")
+        except Exception as exc:
+            logger.error(
+                "PatchCore Memory Bank construction failed for session %s: %s",
+                session_id, exc, exc_info=True,
+            )
+
     return DatasetResult(
         results=results,
         analytics=analytics,
