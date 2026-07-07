@@ -639,6 +639,107 @@ def create_app() -> Flask:
             logging.getLogger("fewvision.app").exception("PDF generation failed")
             return jsonify({"error": f"PDF generation failed: {exc}"}), 500
 
+    # ---------------------------------------------------------------------------
+    # PatchCore / Defect Localization API routes
+    # ---------------------------------------------------------------------------
+
+    @app.route("/inspection/<session_id>/<filename>")
+    def serve_inspection_file(session_id: str, filename: str):
+        """Serve inspection images, heatmaps, and overlays."""
+        directory = os.path.join(config.DATA_FOLDER, "inspection", session_id)
+        if not os.path.isdir(directory):
+            return jsonify({"error": "No inspection directory found"}), 404
+        return send_file(os.path.join(directory, secure_filename(filename)))
+
+    @app.route("/api/patchcore/<session_id>")
+    def patchcore_results(session_id: str):
+        """Return PatchCore localization details for all inspected images in the latest run."""
+        session_inf_dir = os.path.join(config.INFERENCE_FOLDER, session_id)
+        if not os.path.isdir(session_inf_dir):
+            return jsonify({"error": "No inference runs found for this session."}), 404
+
+        # Find latest run
+        latest_run_id = None
+        latest_time = None
+        for d in os.listdir(session_inf_dir):
+            summary_path = os.path.join(session_inf_dir, d, "inspection_summary.json")
+            if os.path.isfile(summary_path):
+                try:
+                    with open(summary_path) as f:
+                        summary = json.load(f)
+                    ts = summary.get("timestamp", "")
+                    if latest_time is None or ts > latest_time:
+                        latest_time = ts
+                        latest_run_id = d
+                except Exception:
+                    pass
+
+        if not latest_run_id:
+            return jsonify({"error": "No valid runs found."}), 404
+
+        results_path = os.path.join(session_inf_dir, latest_run_id, "results.json")
+        if not os.path.isfile(results_path):
+            return jsonify({"error": "results.json not found for the latest run."}), 404
+
+        with open(results_path) as f:
+            results = json.load(f)
+
+        # Formulate output keyed by image name
+        patchcore_data = {}
+        for r in results:
+            if r.get("patchcore_enabled", False):
+                patchcore_data[r["image_name"]] = {
+                    "heatmap_url": r.get("heatmap_url", ""),
+                    "overlay_url": r.get("overlay_url", ""),
+                    "original_url": r.get("original_url", ""),
+                    "bounding_box": r.get("bounding_box", []),
+                    "area_percent": r.get("anomaly_area_percent", 0.0),
+                    "max_score": r.get("max_patch_score", 0.0),
+                    "centroid": r.get("centroid", []),
+                    "top_5_patch_matches": r.get("top_5_patch_matches", [])
+                }
+
+        return jsonify(patchcore_data)
+
+    @app.route("/api/inspection/<session_id>/<image_name>")
+    def inspection_details(session_id: str, image_name: str):
+        """Return the complete inspection JSON for a specific image in the latest run."""
+        session_inf_dir = os.path.join(config.INFERENCE_FOLDER, session_id)
+        if not os.path.isdir(session_inf_dir):
+            return jsonify({"error": "No inference runs found for this session."}), 404
+
+        # Find latest run
+        latest_run_id = None
+        latest_time = None
+        for d in os.listdir(session_inf_dir):
+            summary_path = os.path.join(session_inf_dir, d, "inspection_summary.json")
+            if os.path.isfile(summary_path):
+                try:
+                    with open(summary_path) as f:
+                        summary = json.load(f)
+                    ts = summary.get("timestamp", "")
+                    if latest_time is None or ts > latest_time:
+                        latest_time = ts
+                        latest_run_id = d
+                except Exception:
+                    pass
+
+        if not latest_run_id:
+            return jsonify({"error": "No valid runs found."}), 404
+
+        results_path = os.path.join(session_inf_dir, latest_run_id, "results.json")
+        if not os.path.isfile(results_path):
+            return jsonify({"error": "results.json not found for the latest run."}), 404
+
+        with open(results_path) as f:
+            results = json.load(f)
+
+        for r in results:
+            if r["image_name"] == image_name:
+                return jsonify(r)
+
+        return jsonify({"error": f"Image '{image_name}' not found in latest run."}), 404
+
     return app
 
 

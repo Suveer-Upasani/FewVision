@@ -142,3 +142,14 @@ DEFAULT_TOP_K = int(os.environ.get("FEWVISION_DEFAULT_TOP_K", "5"))
 DEFAULT_SIMILARITY = os.environ.get("FEWVISION_DEFAULT_SIMILARITY", "cosine")
 DEFAULT_MEMORY_BANK = os.environ.get("FEWVISION_DEFAULT_MEMORY_BANK", MEMORY_BANK_FOLDER)
 MAX_TEST_IMAGES = int(os.environ.get("FEWVISION_MAX_TEST_IMAGES", "20"))
+
+# ---------------------------------------------------------------------------
+# PatchCore Anomaly Localization
+# ---------------------------------------------------------------------------
+PATCHCORE_ENABLED = os.environ.get("FEWVISION_PATCHCORE_ENABLED", "true").lower() == "true"
+PATCH_SIZE = int(os.environ.get("FEWVISION_PATCH_SIZE", "14"))
+PATCH_SIMILARITY = os.environ.get("FEWVISION_PATCH_SIMILARITY", "cosine")
+PATCH_THRESHOLD = float(os.environ.get("FEWVISION_PATCH_THRESHOLD", "0.5"))
+HEATMAP_ALPHA = float(os.environ.get("FEWVISION_HEATMAP_ALPHA", "0.6"))
+SAVE_HEATMAPS = os.environ.get("FEWVISION_SAVE_HEATMAPS", "true").lower() == "true"
+

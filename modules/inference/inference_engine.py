@@ -52,6 +52,18 @@ class InferenceEngine:
         self.memory_bank = MemoryBank()
         self.memory_bank.load(session_id)
 
+        # 1b. Load Patch Memory Bank if enabled
+        self.patchcore_enabled = getattr(config, "PATCHCORE_ENABLED", True)
+        self.patch_memory_bank = None
+        if self.patchcore_enabled:
+            try:
+                from modules.patchcore.patch_memory_bank import PatchMemoryBank
+                self.patch_memory_bank = PatchMemoryBank(patch_size=config.PATCH_SIZE)
+                self.patch_memory_bank.load(session_id)
+            except Exception as e:
+                logger.error("Failed to load PatchMemoryBank for session %s: %s", session_id, e)
+                self.patchcore_enabled = False
+
         # 2. Resolve and Load Feature Extractor
         extractor_name = self.memory_bank._extractor_info.get(
             "extractor_name", config.FEATURE_EXTRACTOR
@@ -63,6 +75,7 @@ class InferenceEngine:
         # 3. Retrieve settings
         self.top_k = getattr(config, "DEFAULT_TOP_K", 5)
         self.similarity_metric = getattr(config, "DEFAULT_SIMILARITY", "cosine")
+
 
     def predict(self, image_path: str) -> InspectionResult:
         """Run the complete inference pipeline on a single image.
@@ -128,6 +141,108 @@ class InferenceEngine:
             distances=distances, nearest_index=nearest_index
         )
 
+        # PatchCore processing
+        patchcore_res = {
+            "patchcore_enabled": False,
+            "max_patch_score": 0.0,
+            "anomaly_area_percent": 0.0,
+            "bounding_box": [],
+            "centroid": [],
+            "heatmap_url": "",
+            "overlay_url": "",
+            "original_url": "",
+            "top_5_patch_matches": []
+        }
+        if self.patchcore_enabled and self.patch_memory_bank:
+            try:
+                logger.info("Running PatchCore analysis for: %s", image_path)
+                from modules.patchcore.patch_extractor import PatchExtractor
+                from modules.patchcore.patch_similarity import search_patch_neighbors
+                from modules.patchcore.heatmap import generate_heatmap
+                from modules.patchcore.localization import localize_defects
+
+                # 1. Extract patch features
+                patch_extractor = PatchExtractor(extractor=self.extractor, patch_size=config.PATCH_SIZE)
+                patch_embeddings = patch_extractor.extract(img_bgr)  # (196, D)
+
+                # 2. Search neighbors with k=5 to retrieve details
+                p_indices, p_distances, p_similarities = search_patch_neighbors(
+                    patch_embeddings,
+                    self.patch_memory_bank._embeddings,
+                    metric=config.PATCH_SIMILARITY,
+                    k=5
+                )
+
+                # 3. Create distance map using nearest neighbor (k=1) distances
+                distance_map = p_distances[:, 0].reshape(14, 14)
+
+                # 4. Generate heatmap & overlay
+                heatmap, overlay = generate_heatmap(image_path, distance_map, alpha=config.HEATMAP_ALPHA)
+
+                # 5. Localize defects
+                loc = localize_defects(distance_map, img_bgr.shape[:2], threshold=config.PATCH_THRESHOLD)
+
+                # Draw bounding box and centroid on overlay
+                bbox = loc["bbox"]
+                if bbox != [0, 0, 0, 0]:
+                    ymin, xmin, ymax, xmax = bbox
+                    cv2.rectangle(overlay, (xmin, ymin), (xmax, ymax), (0, 0, 255), 2)  # red box
+                    cy, cx = loc["center"]
+                    cv2.circle(overlay, (cx, cy), 5, (0, 0, 255), -1)  # red dot
+
+                # 6. Save inspection files
+                image_name = os.path.basename(image_path)
+                image_stem = os.path.splitext(image_name)[0]
+                inspect_dir = ensure_dir(os.path.join(config.DATA_FOLDER, "inspection", self.session_id))
+
+                heatmap_path = os.path.join(inspect_dir, f"{image_stem}_heatmap.png")
+                overlay_path = os.path.join(inspect_dir, f"{image_stem}_overlay.png")
+                original_copy_path = os.path.join(inspect_dir, f"{image_stem}_original.png")
+
+                cv2.imwrite(heatmap_path, heatmap)
+                cv2.imwrite(overlay_path, overlay)
+                cv2.imwrite(original_copy_path, img_bgr)
+
+                # 7. Formulate top 5 matches
+                worst_patch_indices = np.argsort(p_distances[:, 0])[::-1][:5]
+                top_5_patch_matches = []
+                for rank, patch_idx in enumerate(worst_patch_indices, 1):
+                    ref_idx = p_indices[patch_idx, 0]
+                    ref_dist = p_distances[patch_idx, 0]
+                    ref_sim = p_similarities[patch_idx, 0]
+                    ref_meta = self.patch_memory_bank._metadata[ref_idx]
+
+                    row = patch_idx // 14
+                    col = patch_idx % 14
+
+                    top_5_patch_matches.append({
+                        "rank": rank,
+                        "test_patch_index": int(patch_idx),
+                        "test_row": int(row),
+                        "test_col": int(col),
+                        "distance": float(ref_dist),
+                        "similarity": float(ref_sim),
+                        "reference_image": ref_meta["original_image"],
+                        "reference_patch_index": ref_meta["patch_index"],
+                        "reference_row": ref_meta["row"],
+                        "reference_col": ref_meta["column"],
+                        "augmentation_source": ref_meta["augmentation_source"]
+                    })
+
+                patchcore_res = {
+                    "patchcore_enabled": True,
+                    "max_patch_score": float(loc["max_score"]),
+                    "anomaly_area_percent": float(loc["area_percent"]),
+                    "bounding_box": loc["bbox"],
+                    "centroid": loc["center"],
+                    "heatmap_url": f"/inspection/{self.session_id}/{image_stem}_heatmap.png",
+                    "overlay_url": f"/inspection/{self.session_id}/{image_stem}_overlay.png",
+                    "original_url": f"/inspection/{self.session_id}/{image_stem}_original.png",
+                    "top_5_patch_matches": top_5_patch_matches
+                }
+            except Exception as e:
+                logger.error("PatchCore analysis failed for %s: %s", image_path, e, exc_info=True)
+
         return InspectionResult(
             image_name=os.path.basename(image_path),
             image_path=image_path,
@@ -140,7 +255,17 @@ class InferenceEngine:
             content_score=c_metrics.content_score,
             quality_metrics=q_metrics.to_dict(),
             content_metrics=c_metrics.to_dict(),
+            patchcore_enabled=patchcore_res["patchcore_enabled"],
+            max_patch_score=patchcore_res.get("max_patch_score", 0.0),
+            anomaly_area_percent=patchcore_res.get("anomaly_area_percent", 0.0),
+            bounding_box=patchcore_res.get("bounding_box", []),
+            centroid=patchcore_res.get("centroid", []),
+            heatmap_url=patchcore_res.get("heatmap_url", ""),
+            overlay_url=patchcore_res.get("overlay_url", ""),
+            original_url=patchcore_res.get("original_url", ""),
+            top_5_patch_matches=patchcore_res.get("top_5_patch_matches", []),
         )
+
 
     def predict_batch(self, image_paths: List[str]) -> List[InspectionResult]:
         """Run the complete inference pipeline on multiple images.
@@ -217,39 +342,57 @@ class InferenceEngine:
         with open(os.path.join(run_dir, "inspection_summary.json"), "w") as f:
             json.dump(summary, f, indent=2)
 
-        # 3. Create annotated_image.png placeholder canvas
-        placeholder = np.zeros((400, 600, 3), dtype=np.uint8) + 40  # dark background
-        cv2.putText(
-            placeholder,
-            "Inspection Heatmap Placeholder",
-            (50, 180),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (180, 180, 180),
-            2,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            placeholder,
-            f"Run: {run_id}",
-            (50, 230),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (120, 120, 120),
-            1,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            placeholder,
-            "PatchCore / PaDiM visualization will render here.",
-            (50, 270),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (100, 100, 100),
-            1,
-            cv2.LINE_AA,
-        )
-        cv2.imwrite(os.path.join(run_dir, "annotated_image.png"), placeholder)
+        # 3. Create annotated_image.png (or use first PatchCore overlay)
+        saved_annotated = False
+        if results:
+            first_res = results[0]
+            if getattr(first_res, "patchcore_enabled", False) and first_res.overlay_url:
+                image_name = first_res.image_name
+                image_stem = os.path.splitext(image_name)[0]
+                overlay_path = os.path.join(config.DATA_FOLDER, "inspection", self.session_id, f"{image_stem}_overlay.png")
+                if os.path.isfile(overlay_path):
+                    import shutil
+                    try:
+                        shutil.copy(overlay_path, os.path.join(run_dir, "annotated_image.png"))
+                        saved_annotated = True
+                        logger.info("Copied first overlay to annotated_image.png for PDF report")
+                    except Exception as e:
+                        logger.error("Failed to copy overlay to annotated_image.png: %s", e)
+
+        if not saved_annotated:
+            placeholder = np.zeros((400, 600, 3), dtype=np.uint8) + 40  # dark background
+            cv2.putText(
+                placeholder,
+                "Inspection Heatmap Placeholder",
+                (50, 180),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (180, 180, 180),
+                2,
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                placeholder,
+                f"Run: {run_id}",
+                (50, 230),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (120, 120, 120),
+                1,
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                placeholder,
+                "PatchCore / PaDiM visualization will render here.",
+                (50, 270),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (100, 100, 100),
+                1,
+                cv2.LINE_AA,
+            )
+            cv2.imwrite(os.path.join(run_dir, "annotated_image.png"), placeholder)
 
         logger.info("Inspection run %s successfully saved.", run_id)
         return summary
+

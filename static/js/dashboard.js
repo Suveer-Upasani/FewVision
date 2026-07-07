@@ -267,6 +267,73 @@
                 `;
             });
 
+            let patchcoreHtml = '';
+            if (item.patchcore_enabled) {
+                let patchMatchesHtml = '';
+                if (item.top_5_patch_matches) {
+                    item.top_5_patch_matches.forEach(pm => {
+                        patchMatchesHtml += `
+                            <div class="patch-match-row">
+                                <span class="pm-rank">Rank ${pm.rank}</span>
+                                <span class="pm-coords">Patch [Row ${pm.test_row}, Col ${pm.test_col}]</span>
+                                <span class="pm-dist">Dist: ${pm.distance.toFixed(4)}</span>
+                                <span class="pm-sim">Sim: ${(pm.similarity * 100).toFixed(1)}%</span>
+                                <div class="pm-ref-info">
+                                    Matched Ref: <strong title="${pm.reference_image}">${pm.reference_image}</strong> (Patch [Row ${pm.reference_row}, Col ${pm.reference_col}])
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                patchcoreHtml = `
+                    <div class="irc-patchcore-panel">
+                        <div class="irc-patchcore-header">Defect Localization (PatchCore)</div>
+                        
+                        <div class="irc-patchcore-grid">
+                            <div class="irc-pc-box">
+                                <span class="irc-pc-lbl">Original</span>
+                                <img src="${item.original_url}" alt="Original" class="irc-pc-img">
+                            </div>
+                            <div class="irc-pc-box">
+                                <span class="irc-pc-lbl">Heatmap</span>
+                                <img src="${item.heatmap_url}" alt="Heatmap" class="irc-pc-img">
+                            </div>
+                            <div class="irc-pc-box">
+                                <span class="irc-pc-lbl">Overlay & BBox</span>
+                                <img src="${item.overlay_url}" alt="Overlay & Bounding Box" class="irc-pc-img">
+                            </div>
+                        </div>
+
+                        <div class="irc-pc-metrics">
+                            <div class="irc-pc-metric">
+                                <span class="irc-pc-metric-lbl">Max Patch Score</span>
+                                <span class="irc-pc-metric-val">${item.max_patch_score.toFixed(4)}</span>
+                            </div>
+                            <div class="irc-pc-metric">
+                                <span class="irc-pc-metric-lbl">Anomaly Area %</span>
+                                <span class="irc-pc-metric-val">${item.anomaly_area_percent.toFixed(2)}%</span>
+                            </div>
+                            <div class="irc-pc-metric cell-full">
+                                <span class="irc-pc-metric-lbl">Detected Region (Bounding Box)</span>
+                                <span class="irc-pc-metric-val font-mono">[${item.bounding_box.join(', ')}]</span>
+                            </div>
+                            <div class="irc-pc-metric cell-full">
+                                <span class="irc-pc-metric-lbl">Centroid</span>
+                                <span class="irc-pc-metric-val font-mono">[${item.centroid.join(', ')}]</span>
+                            </div>
+                        </div>
+
+                        <details class="irc-patch-matches-details">
+                            <summary class="irc-patch-matches-toggle">View Top 5 Anomalous Patch Matches</summary>
+                            <div class="irc-patch-matches-list">
+                                ${patchMatchesHtml}
+                            </div>
+                        </details>
+                    </div>
+                `;
+            }
+
             card.innerHTML = `
                 <div class="irc-header">
                     <div class="irc-image-name">${item.image_name}</div>
@@ -309,6 +376,8 @@
                         </div>
                     </div>
                 </div>
+
+                ${patchcoreHtml}
 
                 <details class="irc-neighbors-details">
                     <summary class="irc-neighbors-toggle">View Top 5 Nearest Reference Neighbors</summary>

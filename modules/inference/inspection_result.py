@@ -57,6 +57,17 @@ class InspectionResult:
     quality_metrics: Dict[str, Any] = field(default_factory=dict)
     content_metrics: Dict[str, Any] = field(default_factory=dict)
 
+    # PatchCore fields
+    patchcore_enabled: bool = False
+    max_patch_score: float = 0.0
+    anomaly_area_percent: float = 0.0
+    bounding_box: List[int] = field(default_factory=list)  # [ymin, xmin, ymax, xmax]
+    centroid: List[int] = field(default_factory=list)  # [cy, cx]
+    heatmap_url: str = ""
+    overlay_url: str = ""
+    original_url: str = ""
+    top_5_patch_matches: List[Dict[str, Any]] = field(default_factory=list)
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert the inspection result into a JSON-serialisable dictionary."""
         return {
@@ -71,4 +82,14 @@ class InspectionResult:
             "content_score": self.content_score,
             "quality_metrics": self.quality_metrics,
             "content_metrics": self.content_metrics,
+            "patchcore_enabled": self.patchcore_enabled,
+            "max_patch_score": self.max_patch_score,
+            "anomaly_area_percent": self.anomaly_area_percent,
+            "bounding_box": self.bounding_box,
+            "centroid": self.centroid,
+            "heatmap_url": self.heatmap_url,
+            "overlay_url": self.overlay_url,
+            "original_url": self.original_url,
+            "top_5_patch_matches": self.top_5_patch_matches,
         }
+
