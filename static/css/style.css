@@ -2071,6 +2071,8 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85em; }
     border-radius: var(--radius-sm);
     border: 1px solid hsla(240, 10%, 20%, 0.4);
     display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
     justify-content: space-between;
     align-items: center;
 }
@@ -2097,6 +2099,7 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85em; }
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--clr-text);
+    word-break: break-word;
 }
 
 .irc-patch-matches-details {

@@ -114,6 +114,11 @@ class ContentAnalyzer:
         if self._fg_mask is not None:
             return self._fg_mask
 
+        # For industrial tile inspection, near-uniform/blank images represent invalid content
+        if np.std(self.gray) < 1.0:
+            self._fg_mask = np.zeros_like(self.gray)
+            return self._fg_mask
+
         # --- Try GrabCut ---
         try:
             mask = np.zeros(self.gray.shape[:2], np.uint8)
@@ -136,14 +141,10 @@ class ContentAnalyzer:
         except Exception:
             pass
 
-        # --- Otsu fallback ---
-        _, mask = cv2.threshold(
-            self.gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-        )
-        if np.sum(mask == 255) < np.sum(mask == 0):
-            mask = cv2.bitwise_not(mask)
-        self._fg_mask = mask
-        return mask
+        # For space-filling industrial tile inputs, if no distinct isolated object is segmented,
+        # the entire image frame is considered foreground (100% valid coverage).
+        self._fg_mask = np.ones_like(self.gray) * 255
+        return self._fg_mask
 
     # ------------------------------------------------------------------
     # Object coverage
@@ -202,13 +203,11 @@ class ContentAnalyzer:
 
         Weights: coverage 35%, centre offset 25%, background 20%, lighting 20%.
         """
-        # Coverage: ideal 40–80 %
-        if 40 <= coverage <= 80:
+        # Coverage: ideal is >= 40% (no upper penalty limit for space-filling industrial tile inputs)
+        if coverage >= 40.0:
             s_cov = 1.0
-        elif coverage < 40:
-            s_cov = coverage / 40.0
         else:
-            s_cov = max(0.0, 1.0 - (coverage - 80) / 20.0)
+            s_cov = coverage / 40.0
 
         s_offset = max(0.0, 1.0 - center_offset / 20.0)
 

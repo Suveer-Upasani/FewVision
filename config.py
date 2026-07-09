@@ -153,3 +153,32 @@ PATCH_THRESHOLD = float(os.environ.get("FEWVISION_PATCH_THRESHOLD", "0.5"))
 HEATMAP_ALPHA = float(os.environ.get("FEWVISION_HEATMAP_ALPHA", "0.6"))
 SAVE_HEATMAPS = os.environ.get("FEWVISION_SAVE_HEATMAPS", "true").lower() == "true"
 
+# ---------------------------------------------------------------------------
+# PaDiM Anomaly Localization
+# ---------------------------------------------------------------------------
+PADIM_ENABLED = os.environ.get("FEWVISION_PADIM_ENABLED", "true").lower() == "true"
+PADIM_D = int(os.environ.get("FEWVISION_PADIM_D", "100"))
+PADIM_REGULARIZATION = float(os.environ.get("FEWVISION_PADIM_REG", "0.01"))
+PADIM_COVARIANCE_METHOD = os.environ.get("FEWVISION_PADIM_COV_METHOD", "shrunk")
+PADIM_SEED = int(os.environ.get("FEWVISION_PADIM_SEED", "42"))
+PADIM_CALIBRATION_PERCENTILE = float(os.environ.get("FEWVISION_PADIM_CALIBRATION_PCT", "99.0"))
+PADIM_LOCALIZATION_THRESHOLD = float(os.environ.get("FEWVISION_PADIM_THRESHOLD", "150.0"))
+
+
+# ---------------------------------------------------------------------------
+# Product Grading MVP Decision Rules (Non-statistical, rule-based thresholds)
+# ---------------------------------------------------------------------------
+# Lower bounds for acceptable quality and content
+GRADING_QUALITY_THRESHOLD = float(os.environ.get("FEWVISION_GRADING_QUALITY_THRESHOLD", "70.0"))
+GRADING_CONTENT_THRESHOLD = float(os.environ.get("FEWVISION_GRADING_CONTENT_THRESHOLD", "80.0"))
+
+# Area thresholds (%) for marking localized anomaly presence
+GRADING_PATCHCORE_AREA_THRESHOLD = float(os.environ.get("FEWVISION_GRADING_PATCHCORE_AREA_THRESHOLD", "1.0"))
+GRADING_PADIM_AREA_THRESHOLD = float(os.environ.get("FEWVISION_GRADING_PADIM_AREA_THRESHOLD", "1.0"))
+
+# Area thresholds (%) for severe local defects
+GRADING_SEVERE_PATCHCORE_AREA = float(os.environ.get("FEWVISION_GRADING_SEVERE_PATCHCORE_AREA", "5.0"))
+GRADING_SEVERE_PADIM_AREA = float(os.environ.get("FEWVISION_GRADING_SEVERE_PADIM_AREA", "5.0"))
+
+
+

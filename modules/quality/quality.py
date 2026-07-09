@@ -174,11 +174,11 @@ class ImageQualityChecker:
             x = steep * (val - mid)
             return 1.0 / (1.0 + math.exp(-x))
 
-        s_blur = sigmoid(blur, 150, 0.02)                          # higher = sharper
+        s_blur = sigmoid(blur, 20.0, 0.10)                         # threshold centered at 20.0 (sharp vs blurred boundary)
         s_bright = max(0.0, 1.0 - abs(bright - 128) / 128.0)      # optimal ~128
-        s_contrast = sigmoid(contrast, 50, 0.04)                   # higher = better
+        s_contrast = sigmoid(contrast, 25.0, 0.15)                 # threshold centered at 25.0 for low-contrast checks
         s_noise = 1.0 - sigmoid(noise, 15, 0.15)                   # lower = better
-        s_res = min(1.0, (w * h) / 640_000)                        # ≥800×800 = 1.0
+        s_res = min(1.0, (w * h) / 250_000)                        # ≥500×500 = 1.0 (standard camera inspection resolution)
 
         raw = (0.30 * s_blur + 0.20 * s_bright + 0.20 * s_contrast
                + 0.15 * s_noise + 0.15 * s_res)

@@ -417,6 +417,108 @@ def process_dataset(
                 session_id, exc, exc_info=True,
             )
 
+    # --- Step 8.5: PaDiM Model construction & Threshold Calibration ---
+    if getattr(config, "PADIM_ENABLED", True) and embedding_count > 0:
+        try:
+            logger.info("Starting PaDiM Model construction for session %s …", session_id)
+            from modules.padim.padim_model import PaDiMModel
+            from modules.patchcore.patch_extractor import PatchExtractor
+            import cv2
+            import numpy as np
+
+            # Re-use the extractor if it's DINOv2 to save memory / startup time
+            patch_extractor = None
+            if "extractor" in locals() and extractor and extractor.extractor_name.startswith("dinov2"):
+                patch_extractor = PatchExtractor(extractor=extractor, patch_size=config.PATCH_SIZE)
+            else:
+                patch_extractor = PatchExtractor(patch_size=config.PATCH_SIZE)
+
+            # Collect original uploaded images to avoid geometric augmentations
+            valid_ext = config.VALID_EXTENSIONS
+            orig_paths = sorted(
+                os.path.join(upload_dir, f)
+                for f in os.listdir(upload_dir)
+                if os.path.splitext(f)[1].lower() in valid_ext
+            )
+
+            images_bgr = []
+            for p in orig_paths:
+                img = cv2.imread(p)
+                if img is not None:
+                    images_bgr.append(img)
+                else:
+                    logger.warning("Could not read original image for PaDiM: %s", p)
+
+            if images_bgr:
+                logger.info("Extracting spatial features for %d original reference images...", len(images_bgr))
+                # Batch extract patch features: (N, 196, dim)
+                patch_embeddings = patch_extractor.extract_batch(
+                    images_bgr,
+                    batch_size=config.EXTRACTION_BATCH_SIZE,
+                )
+                N, P, D = patch_embeddings.shape
+                # Reshape to PaDiM contract: (N, 14, 14, D)
+                ref_features = patch_embeddings.reshape(N, 14, 14, D)
+
+                # Fit PaDiMModel
+                padim_model = PaDiMModel(
+                    d=config.PADIM_D,
+                    regularization=config.PADIM_REGULARIZATION,
+                    covariance_method=config.PADIM_COVARIANCE_METHOD,
+                    random_seed=config.PADIM_SEED,
+                )
+                padim_model.fit(ref_features)
+
+                # Calibrate localization threshold on reference normal features using Leave-One-Out (LOO) cross-calibration
+                # This avoids training calibration leakage and represents unseen query normal scores.
+                logger.info("Calibrating localization threshold using Leave-One-Out (LOO)...")
+                loo_scores = []
+                if N >= 2:
+                    for i in range(N):
+                        # Create train set excluding reference image i
+                        train_indices = [idx for idx in range(N) if idx != i]
+                        train_features = ref_features[train_indices]
+
+                        # Fit temporary model
+                        model_loo = PaDiMModel(
+                            d=config.PADIM_D,
+                            regularization=config.PADIM_REGULARIZATION,
+                            covariance_method=config.PADIM_COVARIANCE_METHOD,
+                            random_seed=config.PADIM_SEED,
+                        )
+                        model_loo.fit(train_features)
+
+                        # Score the held-out reference image i
+                        score_map = model_loo.score(ref_features[i])
+                        loo_scores.append(score_map.flatten())
+                    all_normal_scores = np.concatenate(loo_scores)
+                else:
+                    # Fallback to same-fit if N=1 (although this is mathematically constrained to ~0)
+                    score_map = padim_model.score(ref_features[0])
+                    all_normal_scores = score_map.flatten()
+
+                # Calibrate threshold at configured percentile (e.g. 99th percentile)
+                calibrated_thresh = float(np.percentile(all_normal_scores, config.PADIM_CALIBRATION_PERCENTILE))
+                padim_model.localization_threshold = calibrated_thresh
+
+                logger.info(
+                    "Calibrated PaDiM localization threshold at %.1f percentile using LOO: %.4f. "
+                    "Note: Reference-set LOO calibration is provisional; leave-one-out calibration on a larger held-out dataset is statistically stronger.",
+                    config.PADIM_CALIBRATION_PERCENTILE, calibrated_thresh
+                )
+
+                # Save model
+                out_dir = ensure_dir(os.path.join(config.MEMORY_BANK_FOLDER, session_id, "padim"))
+                padim_model.save(os.path.join(out_dir, "model.npz"))
+                logger.info("PaDiM Model built and saved successfully.")
+            else:
+                logger.warning("No valid original images found for PaDiM construction.")
+        except Exception as exc:
+            logger.error(
+                "PaDiM Model construction failed for session %s: %s",
+                session_id, exc, exc_info=True,
+            )
+
     return DatasetResult(
         results=results,
         analytics=analytics,
