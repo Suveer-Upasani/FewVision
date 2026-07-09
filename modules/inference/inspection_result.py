@@ -68,6 +68,12 @@ class InspectionResult:
     original_url: str = ""
     top_5_patch_matches: List[Dict[str, Any]] = field(default_factory=list)
 
+    # PaDiM fields (nested)
+    padim: Dict[str, Any] = field(default_factory=dict)
+
+    # Product Grade fields (nested)
+    product_grade: Dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert the inspection result into a JSON-serialisable dictionary."""
         return {
@@ -91,5 +97,7 @@ class InspectionResult:
             "overlay_url": self.overlay_url,
             "original_url": self.original_url,
             "top_5_patch_matches": self.top_5_patch_matches,
+            "padim": self.padim,
+            "product_grade": self.product_grade,
         }
 
