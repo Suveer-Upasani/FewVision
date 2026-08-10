@@ -555,4 +555,319 @@
     // Small delay before triggering bar animations so they're visible
     setTimeout(animateBars, 200);
 
+    // -------------------------------------------------------------------------
+    // Mode tab switching — Image / Video
+    // -------------------------------------------------------------------------
+    const tabImage = document.getElementById('tabImage');
+    const tabVideo = document.getElementById('tabVideo');
+    const imageModePanel = document.getElementById('imageModePanel');
+    const videoModePanel = document.getElementById('videoModePanel');
+
+    if (tabImage && tabVideo && imageModePanel && videoModePanel) {
+        tabImage.addEventListener('click', () => {
+            tabImage.classList.add('mode-tab-active');
+            tabImage.setAttribute('aria-selected', 'true');
+            tabVideo.classList.remove('mode-tab-active');
+            tabVideo.setAttribute('aria-selected', 'false');
+            imageModePanel.classList.remove('hidden');
+            videoModePanel.classList.add('hidden');
+            // Hide video results if switching back
+            const vr = document.getElementById('videoResultsSection');
+            if (vr) vr.classList.add('hidden');
+        });
+
+        tabVideo.addEventListener('click', () => {
+            tabVideo.classList.add('mode-tab-active');
+            tabVideo.setAttribute('aria-selected', 'true');
+            tabImage.classList.remove('mode-tab-active');
+            tabImage.setAttribute('aria-selected', 'false');
+            videoModePanel.classList.remove('hidden');
+            imageModePanel.classList.add('hidden');
+            // Hide image results if switching away
+            const ir = document.getElementById('inspectionResultsSection');
+            if (ir) ir.classList.add('hidden');
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Video dropzone — file selection
+    // -------------------------------------------------------------------------
+    const videoDropzone = document.getElementById('videoDropzone');
+    const videoFileInput = document.getElementById('videoFileInput');
+    const videoBrowseBtn = document.getElementById('videoBrowseBtn');
+    const videoPreviewSection = document.getElementById('videoPreviewSection');
+    const videoPreviewName = document.getElementById('videoPreviewName');
+    const videoClearBtn = document.getElementById('videoClearBtn');
+    const videoConfigSection = document.getElementById('videoConfigSection');
+    const videoActionSection = document.getElementById('videoActionSection');
+    const inspectVideoBtn = document.getElementById('inspectVideoBtn');
+    const videoInspectProgress = document.getElementById('videoInspectProgress');
+
+    let selectedVideoFile = null;
+    const VIDEO_EXTS = ['.mp4', '.mov', '.avi', '.mkv'];
+
+    function isVideoFile(name) {
+        const ext = name.substring(name.lastIndexOf('.')).toLowerCase();
+        return VIDEO_EXTS.includes(ext);
+    }
+
+    function handleVideoFile(file) {
+        if (!isVideoFile(file.name)) {
+            showError('Unsupported file type. Please upload MP4, MOV, AVI, or MKV.');
+            return;
+        }
+        selectedVideoFile = file;
+        videoPreviewName.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+        videoPreviewSection.classList.remove('hidden');
+        videoConfigSection.classList.remove('hidden');
+        videoActionSection.classList.remove('hidden');
+    }
+
+    function clearVideoSelection() {
+        selectedVideoFile = null;
+        videoFileInput.value = '';
+        videoPreviewSection.classList.add('hidden');
+        videoConfigSection.classList.add('hidden');
+        videoActionSection.classList.add('hidden');
+    }
+
+    if (videoDropzone && videoFileInput) {
+        ['dragenter', 'dragover'].forEach(eventName => {
+            videoDropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                videoDropzone.classList.add('drag-active');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            videoDropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                videoDropzone.classList.remove('drag-active');
+            }, false);
+        });
+
+        videoDropzone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) handleVideoFile(files[0]);
+        });
+
+        if (videoBrowseBtn) {
+            videoBrowseBtn.addEventListener('click', () => videoFileInput.click());
+        }
+
+        videoFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) handleVideoFile(e.target.files[0]);
+        });
+
+        if (videoClearBtn) {
+            videoClearBtn.addEventListener('click', clearVideoSelection);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Video inspect button
+    // -------------------------------------------------------------------------
+    if (inspectVideoBtn) {
+        inspectVideoBtn.addEventListener('click', async () => {
+            if (!selectedVideoFile) return;
+
+            const sessionId = inspectVideoBtn.dataset.session;
+            const formData = new FormData();
+            formData.append('session_id', sessionId);
+            formData.append('files', selectedVideoFile);
+
+            // Optionally pass config params as custom headers (server uses config.py defaults).
+            // These are informational only — actual behavior is driven by config.py env vars.
+            const interval = document.getElementById('vcfgInterval');
+            const maxFrames = document.getElementById('vcfgMaxFrames');
+            const aggregation = document.getElementById('vcfgAggregation');
+            const topK = document.getElementById('vcfgTopK');
+            if (interval) formData.append('frame_interval', interval.value);
+            if (maxFrames) formData.append('max_frames', maxFrames.value);
+            if (aggregation) formData.append('aggregation', aggregation.value);
+            if (topK) formData.append('top_k', topK.value);
+
+            inspectVideoBtn.disabled = true;
+            if (videoInspectProgress) videoInspectProgress.classList.remove('hidden');
+            const vr = document.getElementById('videoResultsSection');
+            if (vr) vr.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/inspect', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Video inspection failed');
+                }
+
+                if (data.input_type === 'video') {
+                    renderVideoResults(data);
+                } else {
+                    // Fallback: should not happen if the file was a video
+                    renderInspectionResults(data);
+                }
+
+                clearVideoSelection();
+
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                inspectVideoBtn.disabled = false;
+                if (videoInspectProgress) videoInspectProgress.classList.add('hidden');
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Render video results
+    // -------------------------------------------------------------------------
+    function renderVideoResults(data) {
+        const section = document.getElementById('videoResultsSection');
+        if (!section) return;
+
+        // --- Summary stats ---
+        const score = data.video_score;
+        const vstScore = document.getElementById('vstVideoScore');
+        const vstProcessed = document.getElementById('vstProcessed');
+        const vstAnomalous = document.getElementById('vstAnomalous');
+        const vstPersistence = document.getElementById('vstPersistence');
+        const vstStatus = document.getElementById('vstStatus');
+        const vstAggregation = document.getElementById('vstAggregation');
+
+        if (vstScore) vstScore.textContent = typeof score === 'number' ? score.toFixed(2) : '—';
+        if (vstProcessed) vstProcessed.textContent = data.processed_frames ?? '—';
+        if (vstAnomalous) vstAnomalous.textContent = data.anomalous_frames ?? '—';
+        if (vstPersistence) {
+            const pct = typeof data.anomaly_persistence === 'number'
+                ? (data.anomaly_persistence * 100).toFixed(1) + '%'
+                : '—';
+            vstPersistence.textContent = pct;
+        }
+
+        if (vstStatus) {
+            const statusMap = {
+                NORMAL: 'prediction-normal',
+                SUSPICIOUS: 'prediction-suspicious',
+                ANOMALY: 'prediction-anomalous',
+            };
+            vstStatus.textContent = data.status ?? '—';
+            vstStatus.className = 'video-stat-val prediction-badge ' + (statusMap[data.status] || '');
+        }
+
+        if (vstAggregation) vstAggregation.textContent = data.aggregation_method ?? '—';
+
+        // --- Frame timeline ---
+        renderFrameTimeline(data.frame_results || []);
+
+        // Show section
+        section.classList.remove('hidden');
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // -------------------------------------------------------------------------
+    // Frame timeline rendering
+    // -------------------------------------------------------------------------
+    function renderFrameTimeline(frames) {
+        const strip = document.getElementById('timelineStrip');
+        if (!strip) return;
+        strip.innerHTML = '';
+
+        frames.forEach((frame) => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'timeline-frame' + (frame.is_anomaly ? ' timeline-frame-anomalous' : '');
+            chip.setAttribute('role', 'listitem');
+            chip.setAttribute('aria-label',
+                `Frame ${frame.frame_index} — ${frame.is_anomaly ? 'Anomalous' : 'Normal'} — Score: ${frame.score.toFixed(3)}`
+            );
+            chip.innerHTML = `
+                <span class="tf-index">${frame.frame_index}</span>
+                <span class="tf-score">${frame.score.toFixed(2)}</span>
+            `;
+            chip.addEventListener('click', () => showFrameDetail(frame));
+            strip.appendChild(chip);
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Frame detail panel
+    // -------------------------------------------------------------------------
+    function showFrameDetail(frame) {
+        const panel = document.getElementById('frameDetailPanel');
+        const title = document.getElementById('frameDetailTitle');
+        const imagesEl = document.getElementById('frameDetailImages');
+        const metricsEl = document.getElementById('frameDetailMetrics');
+        if (!panel) return;
+
+        if (title) {
+            title.textContent =
+                `Frame ${frame.frame_index} @ ${frame.timestamp.toFixed(2)}s — ` +
+                (frame.is_anomaly ? '🔴 Anomalous' : '✅ Normal');
+        }
+
+        // Images
+        if (imagesEl) {
+            imagesEl.innerHTML = '';
+
+            const imgs = [
+                { label: 'Original', url: frame.original_url },
+                { label: 'Heatmap', url: frame.heatmap_url },
+                { label: 'Overlay', url: frame.overlay_url },
+            ].filter(i => i.url);
+
+            if (imgs.length === 0) {
+                imagesEl.innerHTML = '<p class="irc-no-images">No images available for this frame.</p>';
+            } else {
+                imgs.forEach(({ label, url }) => {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'irc-pc-img-wrap';
+                    wrap.innerHTML = `
+                        <span class="irc-pc-img-lbl">${label}</span>
+                        <img class="irc-pc-img" src="${url}" alt="${label} for frame ${frame.frame_index}" loading="lazy">
+                    `;
+                    imagesEl.appendChild(wrap);
+                });
+            }
+        }
+
+        // Metrics
+        if (metricsEl) {
+            const bbox = Array.isArray(frame.bounding_box) ? `[${frame.bounding_box.join(', ')}]` : '—';
+            const centroid = Array.isArray(frame.centroid) ? `[${frame.centroid.join(', ')}]` : '—';
+            metricsEl.innerHTML = `
+                <div class="irc-pc-metric-row">
+                    <span class="irc-pc-metric-lbl">Max Patch Score</span>
+                    <span class="irc-pc-metric-val">${frame.score.toFixed(6)}</span>
+                </div>
+                <div class="irc-pc-metric-row">
+                    <span class="irc-pc-metric-lbl">Anomaly Area</span>
+                    <span class="irc-pc-metric-val">${frame.anomaly_area_percent.toFixed(2)}%</span>
+                </div>
+                <div class="irc-pc-metric-row">
+                    <span class="irc-pc-metric-lbl">Bounding Box</span>
+                    <span class="irc-pc-metric-val">${bbox}</span>
+                </div>
+                <div class="irc-pc-metric-row">
+                    <span class="irc-pc-metric-lbl">Centroid</span>
+                    <span class="irc-pc-metric-val">${centroid}</span>
+                </div>
+                ${frame.error ? `<div class="irc-pc-metric-row"><span class="irc-pc-metric-lbl">Error</span><span class="irc-pc-metric-val" style="color:hsl(355,70%,65%)">${frame.error}</span></div>` : ''}
+            `;
+        }
+
+        panel.classList.remove('hidden');
+    }
+
+    // Close button for frame detail
+    const frameDetailClose = document.getElementById('frameDetailClose');
+    if (frameDetailClose) {
+        frameDetailClose.addEventListener('click', () => {
+            const panel = document.getElementById('frameDetailPanel');
+            if (panel) panel.classList.add('hidden');
+        });
+    }
+
 })();

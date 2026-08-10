@@ -181,4 +181,43 @@ GRADING_SEVERE_PATCHCORE_AREA = float(os.environ.get("FEWVISION_GRADING_SEVERE_P
 GRADING_SEVERE_PADIM_AREA = float(os.environ.get("FEWVISION_GRADING_SEVERE_PADIM_AREA", "5.0"))
 
 
+# ---------------------------------------------------------------------------
+# Video Inspection
+# ---------------------------------------------------------------------------
+# Master switch — set to False to disable video upload in the UI and API.
+VIDEO_ENABLED = os.environ.get("FEWVISION_VIDEO_ENABLED", "true").lower() == "true"
 
+# Valid video file extensions accepted by the upload endpoint.
+VALID_VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv"}
+
+# Maximum upload size for a single video file, in megabytes.
+# The Flask MAX_CONTENT_LENGTH is updated at startup to accommodate this.
+MAX_VIDEO_UPLOAD_SIZE_MB = int(os.environ.get("FEWVISION_MAX_VIDEO_MB", "512"))
+
+# How many frames to skip between sampled frames.
+# interval=5 means process frame 0, 5, 10, 15, …
+FRAME_SAMPLE_INTERVAL = int(os.environ.get("FEWVISION_FRAME_SAMPLE_INTERVAL", "5"))
+
+# Hard cap on the total number of frames to process for a single video.
+# Processing stops once this many frames have been inspected regardless of
+# how many remain in the video.
+MAX_FRAMES = int(os.environ.get("FEWVISION_MAX_FRAMES", "100"))
+
+# Aggregation method used to combine per-frame anomaly scores into a single
+# video-level score.  Options: mean | median | max | p95 | top_k
+FRAME_AGGREGATION = os.environ.get("FEWVISION_FRAME_AGGREGATION", "top_k")
+
+# K value used when FRAME_AGGREGATION == "top_k".
+TOP_K_FRAMES = int(os.environ.get("FEWVISION_TOP_K_FRAMES", "5"))
+
+# Minimum number of frames that must be individually flagged as anomalous
+# before the overall video status can be set to ANOMALY.
+MIN_ANOMALOUS_FRAMES = int(os.environ.get("FEWVISION_MIN_ANOMALOUS_FRAMES", "3"))
+
+# Fraction of processed frames that must be anomalous for the temporal
+# persistence check to pass.  Range: [0.0, 1.0].
+TEMPORAL_THRESHOLD = float(os.environ.get("FEWVISION_TEMPORAL_THRESHOLD", "0.5"))
+
+# When True, the extracted video frames and their heatmap / overlay outputs
+# are written to disk under data/inspection/{session_id}/video/{run_id}/.
+SAVE_VIDEO_FRAMES = os.environ.get("FEWVISION_SAVE_VIDEO_FRAMES", "true").lower() == "true"

@@ -117,7 +117,7 @@ class InferenceEngine:
         c_metrics = c_analyzer.analyze()
 
         logger.info("Extracting features for: %s", image_path)
-        # Load image as BGR BGR for model input
+        # Load image as BGR for model input
         img_bgr = cv2.imread(image_path)
         if img_bgr is None:
             raise FileNotFoundError(f"Cannot read image at {image_path}")
@@ -157,27 +157,133 @@ class InferenceEngine:
             distances=distances, nearest_index=nearest_index
         )
 
-        # Shared spatial feature extraction (done once per query image)
-        patch_extractor = None
+        # --- Delegate spatial / localization work to inspect_frame_array ---
+        image_name = os.path.basename(image_path)
+        image_stem = os.path.splitext(image_name)[0]
+        inspect_dir = ensure_dir(os.path.join(config.DATA_FOLDER, "inspection", self.session_id))
+
+        frame_res = self.inspect_frame_array(
+            img_bgr=img_bgr,
+            stem=image_stem,
+            output_dir=inspect_dir,
+        )
+
+        # Setup Product Grading Core
+        from modules.grading.product_grader import ProductGrader
+
+        inspect_res = InspectionResult(
+            image_name=os.path.basename(image_path),
+            image_path=image_path,
+            prediction=score_res["label"],
+            anomaly_score=score_res["score"],
+            confidence=score_res["confidence"],
+            nearest_reference=nearest_reference,
+            top_k_neighbors=top_k_neighbors,
+            quality_score=q_metrics.quality_score,
+            content_score=c_metrics.content_score,
+            quality_metrics=q_metrics.to_dict(),
+            content_metrics=c_metrics.to_dict(),
+            patchcore_enabled=frame_res["patchcore_enabled"],
+            max_patch_score=frame_res.get("max_patch_score", 0.0),
+            anomaly_area_percent=frame_res.get("anomaly_area_percent", 0.0),
+            bounding_box=frame_res.get("bounding_box", []),
+            centroid=frame_res.get("centroid", []),
+            heatmap_url=frame_res.get("heatmap_url", ""),
+            overlay_url=frame_res.get("overlay_url", ""),
+            original_url=frame_res.get("original_url", ""),
+            top_5_patch_matches=frame_res.get("top_5_patch_matches", []),
+            padim=frame_res.get("padim", {}),
+        )
+
+        grader = ProductGrader()
+        grade_res = grader.grade_product(inspect_res)
+        inspect_res.product_grade = grade_res.to_dict()
+
+        return inspect_res
+
+
+    def inspect_frame_array(
+        self,
+        img_bgr: np.ndarray,
+        stem: str,
+        output_dir: str,
+    ) -> dict:
+        """Run the core DINOv2 + PatchCore + PaDiM anomaly detection on a BGR frame.
+
+        This is the **shared frame-level function** used by both image inspection
+        and video inspection.  It performs no quality/content assessment and
+        accepts a pre-loaded numpy array so that it can be called with video
+        frames without any file I/O.
+
+        Parameters
+        ----------
+        img_bgr : np.ndarray
+            BGR image array (as returned by cv2.imread or cv2.VideoCapture.read).
+        stem : str
+            Filename stem (no extension) used for saving output files.
+        output_dir : str
+            Directory where heatmaps, overlays, and the original frame copy
+            should be written.
+
+        Returns
+        -------
+        dict
+            Keys match the patchcore_res / padim_res structure used by
+            ``predict()`` and ``FrameResult``:
+
+            ``{
+                "patchcore_enabled": bool,
+                "max_patch_score": float,
+                "anomaly_area_percent": float,
+                "bounding_box": list,
+                "centroid": list,
+                "heatmap_url": str,      # URL-path (e.g. /inspection/…)
+                "overlay_url": str,
+                "original_url": str,
+                "top_5_patch_matches": list,
+                "padim": dict,
+            }``
+        """
+        # ------------------------------------------------------------------
+        # Shared patch extraction (done once per frame; reused by PatchCore
+        # and PaDiM so we don't run DINOv2 twice).
+        # ------------------------------------------------------------------
         patch_embeddings = None
+        original_copy_path = os.path.join(output_dir, f"{stem}_original.png")
+
         if (self.patchcore_enabled and self.patch_memory_bank) or self.padim_enabled:
             try:
                 from modules.patchcore.patch_extractor import PatchExtractor
                 patch_extractor = PatchExtractor(extractor=self.extractor, patch_size=config.PATCH_SIZE)
                 patch_embeddings = patch_extractor.extract(img_bgr)  # (196, D)
             except Exception as e:
-                logger.error("Shared patch extraction failed for %s: %s", image_path, e, exc_info=True)
+                logger.error("Shared patch extraction failed for stem '%s': %s", stem, e, exc_info=True)
 
-        image_name = os.path.basename(image_path)
-        image_stem = os.path.splitext(image_name)[0]
-        inspect_dir = ensure_dir(os.path.join(config.DATA_FOLDER, "inspection", self.session_id))
-        original_copy_path = os.path.join(inspect_dir, f"{image_stem}_original.png")
-
-        # Save original copy once if any local model is active
+        # Save original frame copy once
         if patch_embeddings is not None:
             cv2.imwrite(original_copy_path, img_bgr)
 
+        # ------------------------------------------------------------------
+        # Build the session-relative URL prefix used for serving files.
+        # The output_dir may contain a sub-path like video/{run_id}/frames/
+        # so we compute the URL suffix relative to data/inspection/{session_id}.
+        # ------------------------------------------------------------------
+        inspect_root = os.path.join(config.DATA_FOLDER, "inspection", self.session_id)
+        try:
+            rel_prefix = os.path.relpath(output_dir, inspect_root)
+            if rel_prefix == ".":
+                url_prefix = f"/inspection/{self.session_id}"
+            else:
+                # Normalise to forward slashes for URL construction.
+                rel_parts = rel_prefix.replace("\\", "/")
+                url_prefix = f"/inspection/{self.session_id}/{rel_parts}"
+        except ValueError:
+            # Fallback if output_dir is on a different drive (Windows edge-case).
+            url_prefix = f"/inspection/{self.session_id}"
+
+        # ------------------------------------------------------------------
         # PatchCore processing
+        # ------------------------------------------------------------------
         patchcore_res = {
             "patchcore_enabled": False,
             "max_patch_score": 0.0,
@@ -186,50 +292,52 @@ class InferenceEngine:
             "centroid": [],
             "heatmap_url": "",
             "overlay_url": "",
-            "original_url": f"/inspection/{self.session_id}/{image_stem}_original.png" if patch_embeddings is not None else "",
-            "top_5_patch_matches": []
+            "original_url": f"{url_prefix}/{stem}_original.png" if patch_embeddings is not None else "",
+            "top_5_patch_matches": [],
         }
 
         if self.patchcore_enabled and self.patch_memory_bank and patch_embeddings is not None:
             try:
-                logger.info("Running PatchCore analysis for: %s", image_path)
+                logger.info("Running PatchCore analysis for stem: %s", stem)
                 from modules.patchcore.patch_similarity import search_patch_neighbors
                 from modules.patchcore.heatmap import generate_heatmap
                 from modules.patchcore.localization import localize_defects
 
-                # 2. Search neighbors with k=5 to retrieve details
+                # Search neighbors with k=5 to retrieve details
                 p_indices, p_distances, p_similarities = search_patch_neighbors(
                     patch_embeddings,
                     self.patch_memory_bank._embeddings,
                     metric=config.PATCH_SIMILARITY,
-                    k=5
+                    k=5,
                 )
 
-                # 3. Create distance map using nearest neighbor (k=1) distances
+                # Create distance map using nearest neighbor (k=1) distances
                 distance_map = p_distances[:, 0].reshape(14, 14)
 
-                # 4. Generate heatmap & overlay
-                heatmap, overlay = generate_heatmap(image_path, distance_map, alpha=config.HEATMAP_ALPHA)
+                # Generate heatmap & overlay
+                # generate_heatmap() takes a path — write original first if needed.
+                if not os.path.isfile(original_copy_path):
+                    cv2.imwrite(original_copy_path, img_bgr)
+                heatmap, overlay = generate_heatmap(original_copy_path, distance_map, alpha=config.HEATMAP_ALPHA)
 
-                # 5. Localize defects
+                # Localize defects
                 loc = localize_defects(distance_map, img_bgr.shape[:2], threshold=config.PATCH_THRESHOLD)
 
                 # Draw bounding box and centroid on overlay
                 bbox = loc["bbox"]
                 if bbox != [0, 0, 0, 0]:
                     ymin, xmin, ymax, xmax = bbox
-                    cv2.rectangle(overlay, (xmin, ymin), (xmax, ymax), (0, 0, 255), 2)  # red box
+                    cv2.rectangle(overlay, (xmin, ymin), (xmax, ymax), (0, 0, 255), 2)
                     cy, cx = loc["center"]
-                    cv2.circle(overlay, (cx, cy), 5, (0, 0, 255), -1)  # red dot
+                    cv2.circle(overlay, (cx, cy), 5, (0, 0, 255), -1)
 
-                # 6. Save inspection files
-                heatmap_path = os.path.join(inspect_dir, f"{image_stem}_heatmap.png")
-                overlay_path = os.path.join(inspect_dir, f"{image_stem}_overlay.png")
-
+                # Save inspection files
+                heatmap_path = os.path.join(output_dir, f"{stem}_heatmap.png")
+                overlay_path = os.path.join(output_dir, f"{stem}_overlay.png")
                 cv2.imwrite(heatmap_path, heatmap)
                 cv2.imwrite(overlay_path, overlay)
 
-                # 7. Formulate top 5 matches
+                # Formulate top 5 matches
                 worst_patch_indices = np.argsort(p_distances[:, 0])[::-1][:5]
                 top_5_patch_matches = []
                 for rank, patch_idx in enumerate(worst_patch_indices, 1):
@@ -252,7 +360,7 @@ class InferenceEngine:
                         "reference_patch_index": ref_meta["patch_index"],
                         "reference_row": ref_meta["row"],
                         "reference_col": ref_meta["column"],
-                        "augmentation_source": ref_meta["augmentation_source"]
+                        "augmentation_source": ref_meta["augmentation_source"],
                     })
 
                 patchcore_res.update({
@@ -261,14 +369,16 @@ class InferenceEngine:
                     "anomaly_area_percent": float(loc["area_percent"]),
                     "bounding_box": loc["bbox"],
                     "centroid": loc["center"],
-                    "heatmap_url": f"/inspection/{self.session_id}/{image_stem}_heatmap.png",
-                    "overlay_url": f"/inspection/{self.session_id}/{image_stem}_overlay.png",
-                    "top_5_patch_matches": top_5_patch_matches
+                    "heatmap_url": f"{url_prefix}/{stem}_heatmap.png",
+                    "overlay_url": f"{url_prefix}/{stem}_overlay.png",
+                    "top_5_patch_matches": top_5_patch_matches,
                 })
             except Exception as e:
-                logger.error("PatchCore analysis failed for %s: %s", image_path, e, exc_info=True)
+                logger.error("PatchCore analysis failed for stem '%s': %s", stem, e, exc_info=True)
 
+        # ------------------------------------------------------------------
         # PaDiM processing
+        # ------------------------------------------------------------------
         padim_res = {
             "enabled": False,
             "image_score": 0.0,
@@ -278,45 +388,39 @@ class InferenceEngine:
             "bounding_box": [],
             "centroid": [],
             "heatmap_url": "",
-            "overlay_url": ""
+            "overlay_url": "",
         }
+
         if self.padim_enabled and self.padim_model and patch_embeddings is not None:
             try:
-                logger.info("Running PaDiM analysis for: %s", image_path)
+                logger.info("Running PaDiM analysis for stem: %s", stem)
                 from modules.patchcore.heatmap import generate_heatmap
                 from modules.patchcore.localization import localize_defects
 
-                # Reshape shared embeddings to (14, 14, D)
                 q_spatial = patch_embeddings.reshape(14, 14, -1)
-
-                # Compute raw distance map
                 distance_map = self.padim_model.score(q_spatial)
 
-                # Compute image-level score using Top-5% Mean
                 flat_dist = distance_map.flatten()
                 sorted_dist = np.sort(flat_dist)[::-1]
                 top_5_pct_count = max(1, int(len(sorted_dist) * 0.05))
                 image_score = float(np.mean(sorted_dist[:top_5_pct_count]))
 
-                # Generate heatmap & overlay
-                heatmap, overlay = generate_heatmap(image_path, distance_map, alpha=config.HEATMAP_ALPHA)
+                if not os.path.isfile(original_copy_path):
+                    cv2.imwrite(original_copy_path, img_bgr)
+                heatmap, overlay = generate_heatmap(original_copy_path, distance_map, alpha=config.HEATMAP_ALPHA)
 
-                # Localize defects with calibrated threshold
                 thresh = getattr(self.padim_model, "localization_threshold", config.PADIM_LOCALIZATION_THRESHOLD)
                 loc = localize_defects(distance_map, img_bgr.shape[:2], threshold=thresh)
 
-                # Draw bounding box and centroid on overlay
                 bbox = loc["bbox"]
                 if bbox != [0, 0, 0, 0]:
                     ymin, xmin, ymax, xmax = bbox
-                    cv2.rectangle(overlay, (xmin, ymin), (xmax, ymax), (0, 0, 255), 2)  # red box
+                    cv2.rectangle(overlay, (xmin, ymin), (xmax, ymax), (0, 0, 255), 2)
                     cy, cx = loc["center"]
-                    cv2.circle(overlay, (cx, cy), 5, (0, 0, 255), -1)  # red dot
+                    cv2.circle(overlay, (cx, cy), 5, (0, 0, 255), -1)
 
-                # Save inspection files
-                heatmap_path = os.path.join(inspect_dir, f"{image_stem}_padim_heatmap.png")
-                overlay_path = os.path.join(inspect_dir, f"{image_stem}_padim_overlay.png")
-
+                heatmap_path = os.path.join(output_dir, f"{stem}_padim_heatmap.png")
+                overlay_path = os.path.join(output_dir, f"{stem}_padim_overlay.png")
                 cv2.imwrite(heatmap_path, heatmap)
                 cv2.imwrite(overlay_path, overlay)
 
@@ -328,44 +432,17 @@ class InferenceEngine:
                     "anomaly_area_percent": float(loc["area_percent"]),
                     "bounding_box": loc["bbox"],
                     "centroid": loc["center"],
-                    "heatmap_url": f"/inspection/{self.session_id}/{image_stem}_padim_heatmap.png",
-                    "overlay_url": f"/inspection/{self.session_id}/{image_stem}_padim_overlay.png"
+                    "heatmap_url": f"{url_prefix}/{stem}_padim_heatmap.png",
+                    "overlay_url": f"{url_prefix}/{stem}_padim_overlay.png",
                 })
             except Exception as e:
-                logger.error("PaDiM analysis failed for %s: %s", image_path, e, exc_info=True)
+                logger.error("PaDiM analysis failed for stem '%s': %s", stem, e, exc_info=True)
 
-        # Setup Product Grading Core
-        from modules.grading.product_grader import ProductGrader
+        return {
+            **patchcore_res,
+            "padim": padim_res,
+        }
 
-        inspect_res = InspectionResult(
-            image_name=os.path.basename(image_path),
-            image_path=image_path,
-            prediction=score_res["label"],
-            anomaly_score=score_res["score"],
-            confidence=score_res["confidence"],
-            nearest_reference=nearest_reference,
-            top_k_neighbors=top_k_neighbors,
-            quality_score=q_metrics.quality_score,
-            content_score=c_metrics.content_score,
-            quality_metrics=q_metrics.to_dict(),
-            content_metrics=c_metrics.to_dict(),
-            patchcore_enabled=patchcore_res["patchcore_enabled"],
-            max_patch_score=patchcore_res.get("max_patch_score", 0.0),
-            anomaly_area_percent=patchcore_res.get("anomaly_area_percent", 0.0),
-            bounding_box=patchcore_res.get("bounding_box", []),
-            centroid=patchcore_res.get("centroid", []),
-            heatmap_url=patchcore_res.get("heatmap_url", ""),
-            overlay_url=patchcore_res.get("overlay_url", ""),
-            original_url=patchcore_res.get("original_url", ""),
-            top_5_patch_matches=patchcore_res.get("top_5_patch_matches", []),
-            padim=padim_res,
-        )
-
-        grader = ProductGrader()
-        grade_res = grader.grade_product(inspect_res)
-        inspect_res.product_grade = grade_res.to_dict()
-
-        return inspect_res
 
 
     def predict_batch(self, image_paths: List[str]) -> List[InspectionResult]:

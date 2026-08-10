@@ -57,7 +57,9 @@ def create_app() -> Flask:
     """
     app = Flask(__name__)
     app.secret_key = config.SECRET_KEY
-    app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
+    # Allow the larger of image limit and video limit so video uploads succeed.
+    video_limit = getattr(config, "MAX_VIDEO_UPLOAD_SIZE_MB", 512) * 1024 * 1024
+    app.config["MAX_CONTENT_LENGTH"] = max(config.MAX_CONTENT_LENGTH, video_limit)
 
     # Ensure all data directories exist at startup
     ensure_dir(config.UPLOAD_FOLDER)
@@ -83,6 +85,14 @@ def create_app() -> Flask:
     # ---------------------------------------------------------------------------
     def _allowed_file(filename: str) -> bool:
         return os.path.splitext(filename)[1].lower() in config.VALID_EXTENSIONS
+
+    def _allowed_video_file(filename: str) -> bool:
+        ext = os.path.splitext(filename)[1].lower()
+        return ext in getattr(config, "VALID_VIDEO_EXTENSIONS", {".mp4", ".mov", ".avi", ".mkv"})
+
+    def _is_video_upload(filename: str) -> bool:
+        """Return True if the uploaded file should be treated as a video."""
+        return _allowed_video_file(filename)
 
     # ---------------------------------------------------------------------------
     # Page 1: Upload
@@ -462,7 +472,15 @@ def create_app() -> Flask:
 
     @app.route("/api/inspect", methods=["POST"])
     def inspect():
-        """Accept test images, run the inference engine, return results."""
+        """Accept a test image or video, run inspection, return results.
+
+        Accepts either:
+        - One or more image files (PNG/JPG/JPEG) → existing image inspection.
+        - A single video file (MP4/MOV/AVI/MKV) → new video inspection.
+
+        The response always includes ``input_type`` (``"image"`` or ``"video"``)
+        so clients can choose the appropriate rendering path.
+        """
         if not config.ENABLE_INFERENCE:
             return jsonify({"error": "Inference pipeline is disabled."}), 400
 
@@ -470,14 +488,12 @@ def create_app() -> Flask:
             return jsonify({"error": "No test files uploaded."}), 400
 
         files = request.files.getlist("files")
-        valid_files = [f for f in files if f and _allowed_file(f.filename)]
-        if not valid_files:
-            return jsonify({"error": "No valid test image files found."}), 400
+        if not files:
+            return jsonify({"error": "No test files uploaded."}), 400
 
-        if len(valid_files) > config.MAX_TEST_IMAGES:
-            return jsonify({
-                "error": f"Too many test files. Maximum is {config.MAX_TEST_IMAGES} images."
-            }), 400
+        # Detect whether this is a video upload by checking the first file.
+        first_filename = files[0].filename if files else ""
+        is_video = _is_video_upload(first_filename)
 
         # Get active session_id
         session_id = request.form.get("session_id") or session.get("session_id")
@@ -489,51 +505,114 @@ def create_app() -> Flask:
             else:
                 return jsonify({"error": "No active session or reference memory bank found. Build reference memory first."}), 400
 
-        from modules.inference.inference_engine import InferenceEngine
-
-        # Setup unique temp subdirectory for this run
         run_id = uuid.uuid4().hex[:12]
         temp_run_dir = ensure_dir(os.path.join(config.TEMP_FOLDER, "inference", session_id, run_id))
 
-        try:
-            # Save uploaded test files temporarily
-            saved_paths = []
-            for f in valid_files:
-                fname = secure_filename(f.filename)
-                save_path = os.path.join(temp_run_dir, fname)
-                f.save(save_path)
-                saved_paths.append(save_path)
+        if is_video:
+            # ----------------------------------------------------------------
+            # Video inspection path
+            # ----------------------------------------------------------------
+            video_enabled = getattr(config, "VIDEO_ENABLED", True)
+            if not video_enabled:
+                return jsonify({"error": "Video inspection is disabled."}), 400
 
-            app_logger.info("Initializing InferenceEngine for session %s", session_id)
-            engine = InferenceEngine(session_id)
+            video_file = files[0]
+            if not _allowed_video_file(video_file.filename):
+                return jsonify({"error": "Unsupported video format. Accepted: mp4, mov, avi, mkv."}), 400
 
-            app_logger.info("Running inspection batch for %d images", len(saved_paths))
-            results = engine.predict_batch(saved_paths)
+            video_filename = secure_filename(video_file.filename)
+            video_save_path = os.path.join(temp_run_dir, video_filename)
 
-            # Save the run under data/inference/{session_id}/{run_id}/
-            summary = engine.save_run(results)
-
-            # Prepare list of dict results to return
-            results_dict = [r.to_dict() for r in results]
-
-            return jsonify({
-                "success": True,
-                "session_id": session_id,
-                "run_id": run_id,
-                "summary": summary,
-                "results": results_dict
-            })
-
-        except Exception as exc:
-            app_logger.error("Inference batch error for session %s: %s", session_id, exc, exc_info=True)
-            return jsonify({"error": str(exc)}), 500
-        finally:
-            # Cleanup temp run directory
             try:
-                clear_dir(temp_run_dir)
-                os.rmdir(temp_run_dir)
-            except Exception:
-                pass
+                video_file.save(video_save_path)
+                app_logger.info(
+                    "Saved video upload: %s (session=%s run=%s)",
+                    video_filename, session_id, run_id,
+                )
+
+                from modules.inference.inference_engine import InferenceEngine
+                from modules.inference.video_inspector import VideoInspector
+
+                app_logger.info("Initializing InferenceEngine for session %s", session_id)
+                engine = InferenceEngine(session_id)
+
+                inspector = VideoInspector(session_id=session_id, engine=engine)
+                video_result = inspector.inspect_video(video_path=video_save_path, run_id=run_id)
+
+                return jsonify({
+                    "success": True,
+                    "input_type": "video",
+                    "session_id": session_id,
+                    "run_id": run_id,
+                    **video_result.to_dict(),
+                })
+
+            except Exception as exc:
+                app_logger.error(
+                    "Video inspection error for session %s: %s", session_id, exc, exc_info=True
+                )
+                return jsonify({"error": str(exc)}), 500
+            finally:
+                # Clean up the temp video file only; frame outputs live in inspection dir.
+                try:
+                    if os.path.isfile(video_save_path):
+                        os.remove(video_save_path)
+                    os.rmdir(temp_run_dir)
+                except Exception:
+                    pass
+
+        else:
+            # ----------------------------------------------------------------
+            # Image inspection path (existing behaviour, unchanged)
+            # ----------------------------------------------------------------
+            valid_files = [f for f in files if f and _allowed_file(f.filename)]
+            if not valid_files:
+                return jsonify({"error": "No valid test image files found."}), 400
+
+            if len(valid_files) > config.MAX_TEST_IMAGES:
+                return jsonify({
+                    "error": f"Too many test files. Maximum is {config.MAX_TEST_IMAGES} images."
+                }), 400
+
+            try:
+                saved_paths = []
+                for f in valid_files:
+                    fname = secure_filename(f.filename)
+                    save_path = os.path.join(temp_run_dir, fname)
+                    f.save(save_path)
+                    saved_paths.append(save_path)
+
+                from modules.inference.inference_engine import InferenceEngine
+
+                app_logger.info("Initializing InferenceEngine for session %s", session_id)
+                engine = InferenceEngine(session_id)
+
+                app_logger.info("Running inspection batch for %d images", len(saved_paths))
+                results = engine.predict_batch(saved_paths)
+
+                summary = engine.save_run(results)
+                results_dict = [r.to_dict() for r in results]
+
+                return jsonify({
+                    "success": True,
+                    "input_type": "image",
+                    "session_id": session_id,
+                    "run_id": run_id,
+                    "summary": summary,
+                    "results": results_dict,
+                })
+
+            except Exception as exc:
+                app_logger.error(
+                    "Inference batch error for session %s: %s", session_id, exc, exc_info=True
+                )
+                return jsonify({"error": str(exc)}), 500
+            finally:
+                try:
+                    clear_dir(temp_run_dir)
+                    os.rmdir(temp_run_dir)
+                except Exception:
+                    pass
 
     @app.route("/api/inference/<session_id>")
     def inference_info(session_id: str):
@@ -645,11 +724,47 @@ def create_app() -> Flask:
 
     @app.route("/inspection/<session_id>/<filename>")
     def serve_inspection_file(session_id: str, filename: str):
-        """Serve inspection images, heatmaps, and overlays."""
+        """Serve inspection images, heatmaps, and overlays (flat, image inspection)."""
         directory = os.path.join(config.DATA_FOLDER, "inspection", session_id)
         if not os.path.isdir(directory):
             return jsonify({"error": "No inspection directory found"}), 404
         return send_file(os.path.join(directory, secure_filename(filename)))
+
+    @app.route("/inspection/<session_id>/video/<run_id>/<subdir>/<filename>")
+    def serve_video_inspection_file(session_id: str, run_id: str, subdir: str, filename: str):
+        """Serve per-frame images, heatmaps, and overlays for video inspection runs.
+
+        URL pattern mirrors the on-disk layout:
+          data/inspection/{session_id}/video/{run_id}/{frames|heatmaps|overlays}/{filename}
+        """
+        allowed_subdirs = {"frames", "heatmaps", "overlays"}
+        if subdir not in allowed_subdirs:
+            return jsonify({"error": "Invalid subdir."}), 404
+
+        directory = os.path.join(
+            config.DATA_FOLDER, "inspection",
+            session_id, "video", run_id, subdir
+        )
+        if not os.path.isdir(directory):
+            return jsonify({"error": "Video inspection directory not found."}), 404
+
+        file_path = os.path.join(directory, secure_filename(filename))
+        if not os.path.isfile(file_path):
+            return jsonify({"error": "File not found."}), 404
+
+        return send_file(file_path)
+
+    @app.route("/api/video-inspect/<session_id>/<run_id>")
+    def video_inspect_info(session_id: str, run_id: str):
+        """Return the full video inspection result JSON for a given run."""
+        results_path = os.path.join(
+            config.DATA_FOLDER, "inspection", session_id, "video", run_id, "results.json"
+        )
+        if not os.path.isfile(results_path):
+            return jsonify({"error": "Video inspection results not found."}), 404
+
+        with open(results_path) as f:
+            return jsonify(json.load(f))
 
     @app.route("/api/patchcore/<session_id>")
     def patchcore_results(session_id: str):

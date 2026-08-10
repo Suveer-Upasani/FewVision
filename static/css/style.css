@@ -2198,4 +2198,245 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85em; }
     }
 }
 
+/* ===========================================================================
+   Video Inspection — Mode Tabs
+   =========================================================================== */
+
+.inspect-mode-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid hsl(220, 20%, 22%);
+    padding-bottom: 12px;
+}
+
+.mode-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: hsl(220, 15%, 60%);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.mode-tab:hover {
+    background: hsl(220, 20%, 20%);
+    color: hsl(220, 15%, 85%);
+}
+
+.mode-tab-active,
+.mode-tab.active {
+    background: hsl(220, 30%, 22%);
+    color: hsl(210, 100%, 72%);
+    border-color: hsl(210, 80%, 45%);
+}
+
+/* ===========================================================================
+   Video Inspection — Config params
+   =========================================================================== */
+
+.video-config-section {
+    margin-top: 18px;
+    background: hsl(220, 20%, 13%);
+    border: 1px solid hsl(220, 20%, 22%);
+    border-radius: 12px;
+    padding: 18px 20px;
+}
+
+.video-config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+}
+
+.video-config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.video-config-field label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: hsl(220, 15%, 65%);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.video-config-input {
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid hsl(220, 20%, 28%);
+    background: hsl(220, 20%, 10%);
+    color: hsl(220, 15%, 90%);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.video-config-input:focus {
+    border-color: hsl(210, 80%, 50%);
+}
+
+.vcfg-hint {
+    font-size: 0.72rem;
+    color: hsl(220, 15%, 45%);
+}
+
+/* ===========================================================================
+   Video Inspection — Summary stats grid
+   =========================================================================== */
+
+.video-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 14px;
+    margin: 18px 0 24px;
+}
+
+.video-stat-cell {
+    background: hsl(220, 20%, 13%);
+    border: 1px solid hsl(220, 20%, 22%);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.video-stat-lbl {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: hsl(220, 15%, 55%);
+}
+
+.video-stat-val {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: hsl(220, 15%, 92%);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ===========================================================================
+   Video Inspection — Frame timeline
+   =========================================================================== */
+
+.video-timeline-section {
+    margin-top: 8px;
+    margin-bottom: 22px;
+}
+
+.timeline-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: hsl(220, 15%, 55%);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+}
+
+.timeline-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 12px;
+    background: hsl(220, 20%, 10%);
+    border: 1px solid hsl(220, 20%, 20%);
+    border-radius: 12px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.timeline-frame {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 48px;
+    border-radius: 8px;
+    border: 1px solid hsl(220, 20%, 26%);
+    background: hsl(220, 20%, 16%);
+    color: hsl(220, 15%, 70%);
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, transform 0.1s;
+    gap: 2px;
+}
+
+.timeline-frame:hover {
+    background: hsl(220, 25%, 24%);
+    border-color: hsl(210, 70%, 50%);
+    transform: translateY(-1px);
+}
+
+.timeline-frame-anomalous {
+    background: hsl(355, 35%, 18%);
+    border-color: hsl(355, 70%, 42%);
+    color: hsl(355, 80%, 72%);
+}
+
+.timeline-frame-anomalous:hover {
+    background: hsl(355, 40%, 22%);
+    border-color: hsl(355, 75%, 55%);
+}
+
+.tf-index {
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.tf-score {
+    font-size: 0.62rem;
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ===========================================================================
+   Video Inspection — Frame detail panel
+   =========================================================================== */
+
+.frame-detail-panel {
+    margin-top: 20px;
+    background: hsl(220, 20%, 12%);
+    border: 1px solid hsl(220, 20%, 24%);
+    border-radius: 14px;
+    padding: 20px 22px;
+    animation: slideIn 0.2s ease;
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.frame-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.frame-detail-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: hsl(220, 15%, 88%);
+}
+
+.irc-no-images {
+    color: hsl(220, 15%, 50%);
+    font-size: 0.85rem;
+    padding: 12px 0;
+}
 
