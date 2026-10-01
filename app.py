@@ -28,6 +28,20 @@ import uuid
 import base64
 import threading
 import time
+import warnings
+
+# Suppress benign non-critical warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*xFormers is not available.*")
+warnings.filterwarnings("ignore", category=UserWarning, module=r"dinov2\..*")
+warnings.filterwarnings("ignore", category=UserWarning, module="torch.hub")
+os.environ["OPENCV_LOG_LEVEL"] = "ERROR"
+
+try:
+    import cv2.utils.logging as cvlog
+    cvlog.setLogLevel(cvlog.LOG_LEVEL_SILENT)
+except Exception:
+    pass
+
 import cv2
 import numpy as np
 

@@ -29,7 +29,12 @@ from __future__ import annotations
 
 import logging
 import math
+import warnings
 from typing import Any
+
+# Filter benign xFormers warnings from DINOv2 layers
+warnings.filterwarnings("ignore", category=UserWarning, message=".*xFormers is not available.*")
+warnings.filterwarnings("ignore", category=UserWarning, module=r"dinov2\..*")
 
 import cv2
 import numpy as np

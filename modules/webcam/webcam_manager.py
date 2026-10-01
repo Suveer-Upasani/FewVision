@@ -22,6 +22,13 @@ import config
 
 logger = logging.getLogger("fewvision.webcam.manager")
 
+# Silence OpenCV internal C++ backend warnings (e.g. DSHOW probe on empty indices)
+try:
+    import cv2.utils.logging as cvlog
+    cvlog.setLogLevel(cvlog.LOG_LEVEL_SILENT)
+except Exception:
+    pass
+
 
 def list_available_cameras(max_probe: int = 4) -> List[dict[str, Any]]:
     """Probe system camera indices to discover connected cameras without crashing.
@@ -37,7 +44,13 @@ def list_available_cameras(max_probe: int = 4) -> List[dict[str, Any]]:
         List of dicts with keys: ``index``, ``name``, ``width``, ``height``, ``fps``.
     """
     available = []
-    # On Windows, cv2.CAP_DSHOW provides fast enumeration without slow delays
+    # Ensure OpenCV internal backend logging is completely silent during index probing
+    try:
+        import cv2.utils.logging as cvlog
+        cvlog.setLogLevel(cvlog.LOG_LEVEL_SILENT)
+    except Exception:
+        pass
+
     backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
 
     for idx in range(max_probe):
