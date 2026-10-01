@@ -250,7 +250,16 @@
                         </svg>
                         Test Video
                     </button>
+                    <button class="mode-tab" id="tabWebcam" role="tab" aria-selected="false" aria-controls="webcamModePanel">
+                        <svg viewBox="0 0 20 20" fill="none" width="16" height="16" aria-hidden="true">
+                            <circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.6"/>
+                            <path d="M10 2a8 8 0 100 16 8 8 0 000-16z" stroke="currentColor" stroke-width="1.6"/>
+                            <circle cx="10" cy="10" r="1.5" fill="currentColor"/>
+                        </svg>
+                        Live Webcam
+                    </button>
                 </div>
+
 
                 <!-- IMAGE MODE PANEL -->
                 <div id="imageModePanel" role="tabpanel" aria-labelledby="tabImage">
@@ -375,8 +384,246 @@
                 </div>
 
                 </div><!-- end videoModePanel -->
+
+                <!-- WEBCAM MODE PANEL -->
+                <div id="webcamModePanel" role="tabpanel" aria-labelledby="tabWebcam" class="hidden">
+                    <!-- Webcam Settings & Source Toolbar -->
+                    <div class="webcam-toolbar">
+                        <div class="webcam-toolbar-group">
+                            <label for="webcamSourceSelect" class="webcam-lbl">Camera Source</label>
+                            <select id="webcamSourceSelect" class="webcam-select">
+                                <option value="browser" selected>Browser Webcam (getUserMedia)</option>
+                                <option value="server_hw">Server Camera (OpenCV Device)</option>
+                                <option value="simulated">Simulated Test Stream (Tiles Loop)</option>
+                            </select>
+                        </div>
+
+                        <div class="webcam-toolbar-group" id="cameraDeviceGroup">
+                            <label for="cameraDeviceSelect" class="webcam-lbl">Device</label>
+                            <select id="cameraDeviceSelect" class="webcam-select">
+                                <option value="0">Default Camera (0)</option>
+                            </select>
+                        </div>
+
+                        <div class="webcam-toolbar-group">
+                            <label for="webcamRoiMode" class="webcam-lbl">Inspection ROI</label>
+                            <select id="webcamRoiMode" class="webcam-select">
+                                <option value="center" selected>Centered Part Box (80%)</option>
+                                <option value="full">Full Frame</option>
+                                <option value="auto">Auto Object Detect</option>
+                            </select>
+                        </div>
+
+                        <div class="webcam-toolbar-group">
+                            <label for="webcamThresholdInput" class="webcam-lbl">
+                                Threshold: <span id="webcamThreshVal">0.50</span>
+                            </label>
+                            <input type="range" id="webcamThresholdInput" min="0.10" max="1.20" step="0.02" value="0.50" class="webcam-slider">
+                        </div>
+
+                        <div class="webcam-toolbar-group">
+                            <label for="webcamTemporalInput" class="webcam-lbl">
+                                Smoothing: <span id="webcamTemporalVal">5</span> frames
+                            </label>
+                            <input type="range" id="webcamTemporalInput" min="1" max="15" step="1" value="5" class="webcam-slider">
+                        </div>
+                    </div>
+
+                    <!-- Webcam Studio Main Stage -->
+                    <div class="webcam-studio-grid">
+                        <!-- Left: Live Feed Viewport -->
+                        <div class="webcam-viewport-card">
+                            <div class="webcam-viewport-container" id="webcamViewport">
+                                <!-- Browser Video Stream -->
+                                <video id="webcamVideo" playsinline autoplay muted class="webcam-media"></video>
+
+                                <!-- Server Stream (MJPEG) -->
+                                <img id="webcamServerStream" class="webcam-media hidden" alt="Server Camera Feed">
+
+                                <!-- Live HUD & Heatmap Canvas -->
+                                <canvas id="webcamOverlayCanvas" class="webcam-overlay"></canvas>
+
+                                <!-- Offline / Idle Placeholder -->
+                                <div id="webcamPlaceholder" class="webcam-placeholder">
+                                    <div class="webcam-placeholder-icon">📷</div>
+                                    <h3>Live Camera Ready</h3>
+                                    <p>Select your camera source and click "Start Inspection" to begin real-time analysis.</p>
+                                </div>
+
+                                <!-- Floating Status Badge -->
+                                <div id="webcamVerdictBadge" class="webcam-verdict-badge verdict-idle">READY</div>
+
+                                <!-- Live Warning Message Overlay -->
+                                <div id="webcamWarningBanner" class="webcam-warning-banner hidden"></div>
+                            </div>
+
+                            <!-- Live Controls Strip -->
+                            <div class="webcam-controls-strip">
+                                <button type="button" class="btn-primary btn-webcam-action" id="btnWebcamStart" data-session="{{ session_id }}">
+                                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                    Start Inspection
+                                </button>
+                                <button type="button" class="btn-secondary btn-webcam-action" id="btnWebcamPause" disabled>
+                                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                                    Pause
+                                </button>
+                                <button type="button" class="btn-secondary btn-webcam-action" id="btnWebcamCapture" disabled>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19 4h-3.5L14 2H10L8.5 4H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/></svg>
+                                    Capture Snapshot
+                                </button>
+                                <button type="button" class="btn-ghost btn-webcam-action" id="btnWebcamReset">
+                                    Reset Counters
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Right: Live Telemetry & Human Review Panel -->
+                        <div class="webcam-telemetry-panel">
+                            <!-- Verdict & Score Card -->
+                            <div class="telemetry-card">
+                                <div class="telemetry-card-title">Live Anomaly Scoring</div>
+                                <div class="telemetry-score-row">
+                                    <div class="telemetry-big-score" id="telemetryAnomalyScore">—</div>
+                                    <div class="telemetry-score-details">
+                                        <div class="telemetry-sub-lbl">Raw Patch Distance: <strong id="telemetryRawScore">—</strong></div>
+                                        <div class="telemetry-sub-lbl">Decision Threshold: <strong id="telemetryThresholdVal">0.50</strong></div>
+                                        <div class="telemetry-sub-lbl">Defect Area: <strong id="telemetryAreaPct">0.0%</strong></div>
+                                    </div>
+                                </div>
+                                <!-- Anomaly Meter Bar -->
+                                <div class="anomaly-meter-track">
+                                    <div class="anomaly-meter-fill" id="anomalyMeterFill" style="width: 0%"></div>
+                                    <div class="anomaly-meter-threshold" id="anomalyMeterThresholdMarker" style="left: 50%" title="Threshold"></div>
+                                </div>
+                            </div>
+
+                            <!-- Technical Quality Card -->
+                            <div class="telemetry-card">
+                                <div class="telemetry-card-header">
+                                    <span class="telemetry-card-title">Frame Quality</span>
+                                    <span class="quality-chip chip-good" id="telemetryQualityChip">GOOD</span>
+                                </div>
+                                <div class="telemetry-quality-grid">
+                                    <div class="telemetry-q-item">
+                                        <span class="tq-lbl">Blur Variance</span>
+                                        <span class="tq-val" id="tqBlur">—</span>
+                                    </div>
+                                    <div class="telemetry-q-item">
+                                        <span class="tq-lbl">Brightness</span>
+                                        <span class="tq-val" id="tqBrightness">—</span>
+                                    </div>
+                                    <div class="telemetry-q-item">
+                                        <span class="tq-lbl">Contrast</span>
+                                        <span class="tq-val" id="tqContrast">—</span>
+                                    </div>
+                                    <div class="telemetry-q-item">
+                                        <span class="tq-lbl">Noise (MAD)</span>
+                                        <span class="tq-val" id="tqNoise">—</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Hardware & Latency Card -->
+                            <div class="telemetry-card">
+                                <div class="telemetry-card-header">
+                                    <span class="telemetry-card-title">Performance &amp; Timing</span>
+                                    <span class="device-badge font-mono" id="telemetryDevice">CPU</span>
+                                </div>
+                                <div class="telemetry-perf-grid">
+                                    <div class="telemetry-perf-item">
+                                        <span class="tp-lbl">Inference FPS</span>
+                                        <span class="tp-val font-mono" id="tpFPS">0.0</span>
+                                    </div>
+                                    <div class="telemetry-perf-item">
+                                        <span class="tp-lbl">Total Latency</span>
+                                        <span class="tp-val font-mono" id="tpLatency">0 ms</span>
+                                    </div>
+                                    <div class="telemetry-perf-item">
+                                        <span class="tp-lbl">DINOv2 ViT</span>
+                                        <span class="tp-val font-mono" id="tpDinov2">0 ms</span>
+                                    </div>
+                                    <div class="telemetry-perf-item">
+                                        <span class="tp-lbl">PatchCore</span>
+                                        <span class="tp-val font-mono" id="tpPatchcore">0 ms</span>
+                                    </div>
+                                </div>
+                                <div class="telemetry-stats-footer">
+                                    <span>Inspections: <strong id="tpTotalInspections">0</strong></span>
+                                    <span>Anomalies Flagged: <strong id="tpTotalAnomalies">0</strong></span>
+                                </div>
+                            </div>
+
+                            <!-- Human-in-the-Loop Review Card -->
+                            <div class="telemetry-card human-review-card">
+                                <div class="telemetry-card-title">Human Expert Validation</div>
+                                <p class="telemetry-sub-lbl">Validate current live part or captured snapshot:</p>
+                                <div class="human-review-buttons">
+                                    <button type="button" class="btn-review btn-review-anomaly" id="btnReviewAnomaly" title="Confirm Anomaly">
+                                        Confirm Anomaly
+                                    </button>
+                                    <button type="button" class="btn-review btn-review-normal" id="btnReviewNormal" title="Mark Normal">
+                                        Mark Normal
+                                    </button>
+                                    <button type="button" class="btn-review btn-review-fp" id="btnReviewFP" title="False Positive (Model predicted anomaly, but part is normal)">
+                                        False Positive
+                                    </button>
+                                    <button type="button" class="btn-review btn-review-fn" id="btnReviewFN" title="False Negative (Model predicted normal, but defect exists)">
+                                        False Negative
+                                    </button>
+                                    <button type="button" class="btn-review btn-review-uncertain" id="btnReviewUncertain" title="Mark Uncertain">
+                                        Uncertain
+                                    </button>
+                                </div>
+                                <div class="review-notes-wrap">
+                                    <input type="text" id="reviewNotesInput" placeholder="Optional defect notes / region observation..." class="review-notes-input">
+                                </div>
+                                <div id="reviewFeedbackToast" class="review-feedback-toast hidden"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Inspection History & Captures Table -->
+                    <div class="webcam-history-card">
+                        <div class="history-card-header">
+                            <div class="history-title-group">
+                                <h3>Inspection Captures &amp; History</h3>
+                                <span class="history-count-badge" id="historyCountBadge">0 records</span>
+                            </div>
+                            <div class="history-actions">
+                                <a href="/api/webcam/history/export" class="btn-secondary btn-sm" id="btnExportHistory" download>
+                                    Export CSV
+                                </a>
+                                <button type="button" class="btn-ghost btn-sm" id="btnClearHistory">
+                                    Clear History
+                                </button>
+                            </div>
+                        </div>
+                        <div class="history-table-container">
+                            <table class="history-table" id="webcamHistoryTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Timestamp</th>
+                                        <th>Verdict</th>
+                                        <th>Score</th>
+                                        <th>Quality</th>
+                                        <th>Latency</th>
+                                        <th>Expert Review</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="webcamHistoryTbody">
+                                    <tr class="history-empty-row">
+                                        <td colspan="8">No inspections captured yet. Use "Capture Snapshot" or start continuous inspection.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div><!-- end webcamModePanel -->
             </div>
         </section>
+
 
         <!-- Image Inspection Results Summary Section -->
         <section class="results-section hidden" id="inspectionResultsSection" aria-label="Image inspection results">
@@ -500,7 +747,21 @@
         </section>
         {% endif %}
 
+        <!-- Capture Detail Modal -->
+        <div id="captureModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="captureModalTitle">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3 id="captureModalTitle">Inspection Capture Snapshot</h3>
+                    <button type="button" class="modal-close-btn" id="modalCloseBtn">&times;</button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- Populated dynamically by JS -->
+                </div>
+            </div>
+        </div>
+
     </main>
+
 
     <script src="/static/js/dashboard.js"></script>
 </body>

@@ -556,38 +556,41 @@
     setTimeout(animateBars, 200);
 
     // -------------------------------------------------------------------------
-    // Mode tab switching — Image / Video
+    // Mode tab switching — Image / Video / Live Webcam
     // -------------------------------------------------------------------------
     const tabImage = document.getElementById('tabImage');
     const tabVideo = document.getElementById('tabVideo');
+    const tabWebcam = document.getElementById('tabWebcam');
     const imageModePanel = document.getElementById('imageModePanel');
     const videoModePanel = document.getElementById('videoModePanel');
+    const webcamModePanel = document.getElementById('webcamModePanel');
 
-    if (tabImage && tabVideo && imageModePanel && videoModePanel) {
-        tabImage.addEventListener('click', () => {
-            tabImage.classList.add('mode-tab-active');
-            tabImage.setAttribute('aria-selected', 'true');
-            tabVideo.classList.remove('mode-tab-active');
-            tabVideo.setAttribute('aria-selected', 'false');
-            imageModePanel.classList.remove('hidden');
-            videoModePanel.classList.add('hidden');
-            // Hide video results if switching back
-            const vr = document.getElementById('videoResultsSection');
-            if (vr) vr.classList.add('hidden');
+    function switchMode(activeTab, activePanel) {
+        [tabImage, tabVideo, tabWebcam].forEach(t => {
+            if (t) {
+                const isActive = (t === activeTab);
+                t.classList.toggle('mode-tab-active', isActive);
+                t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            }
+        });
+        [imageModePanel, videoModePanel, webcamModePanel].forEach(p => {
+            if (p) p.classList.toggle('hidden', p !== activePanel);
         });
 
-        tabVideo.addEventListener('click', () => {
-            tabVideo.classList.add('mode-tab-active');
-            tabVideo.setAttribute('aria-selected', 'true');
-            tabImage.classList.remove('mode-tab-active');
-            tabImage.setAttribute('aria-selected', 'false');
-            videoModePanel.classList.remove('hidden');
-            imageModePanel.classList.add('hidden');
-            // Hide image results if switching away
-            const ir = document.getElementById('inspectionResultsSection');
-            if (ir) ir.classList.add('hidden');
-        });
+        // Hide other result sections when switching
+        const ir = document.getElementById('inspectionResultsSection');
+        const vr = document.getElementById('videoResultsSection');
+        if (activePanel !== imageModePanel && ir) ir.classList.add('hidden');
+        if (activePanel !== videoModePanel && vr) vr.classList.add('hidden');
     }
+
+    if (tabImage) tabImage.addEventListener('click', () => switchMode(tabImage, imageModePanel));
+    if (tabVideo) tabVideo.addEventListener('click', () => switchMode(tabVideo, videoModePanel));
+    if (tabWebcam) tabWebcam.addEventListener('click', () => {
+        switchMode(tabWebcam, webcamModePanel);
+        if (window.initWebcamDevices) window.initWebcamDevices();
+    });
+
 
     // -------------------------------------------------------------------------
     // Video dropzone — file selection
@@ -861,6 +864,732 @@
         panel.classList.remove('hidden');
     }
 
+    // -------------------------------------------------------------------------
+    // Live Webcam Inspection Studio Controller
+    // -------------------------------------------------------------------------
+    (function initWebcamStudio() {
+        // Toolbar controls
+        const webcamSourceSelect = document.getElementById('webcamSourceSelect');
+        const cameraDeviceSelect = document.getElementById('cameraDeviceSelect');
+        const cameraDeviceGroup = document.getElementById('cameraDeviceGroup');
+        const webcamRoiMode = document.getElementById('webcamRoiMode');
+        const webcamThresholdInput = document.getElementById('webcamThresholdInput');
+        const webcamThreshVal = document.getElementById('webcamThreshVal');
+        const webcamTemporalInput = document.getElementById('webcamTemporalInput');
+        const webcamTemporalVal = document.getElementById('webcamTemporalVal');
+
+        // Viewport elements
+        const webcamViewport = document.getElementById('webcamViewport');
+        const webcamVideo = document.getElementById('webcamVideo');
+        const webcamServerStream = document.getElementById('webcamServerStream');
+        const webcamOverlayCanvas = document.getElementById('webcamOverlayCanvas');
+        const webcamPlaceholder = document.getElementById('webcamPlaceholder');
+        const webcamVerdictBadge = document.getElementById('webcamVerdictBadge');
+        const webcamWarningBanner = document.getElementById('webcamWarningBanner');
+
+        // Action buttons
+        const btnWebcamStart = document.getElementById('btnWebcamStart');
+        const btnWebcamPause = document.getElementById('btnWebcamPause');
+        const btnWebcamCapture = document.getElementById('btnWebcamCapture');
+        const btnWebcamReset = document.getElementById('btnWebcamReset');
+
+        // Telemetry elements
+        const telemetryAnomalyScore = document.getElementById('telemetryAnomalyScore');
+        const telemetryRawScore = document.getElementById('telemetryRawScore');
+        const telemetryThresholdVal = document.getElementById('telemetryThresholdVal');
+        const telemetryAreaPct = document.getElementById('telemetryAreaPct');
+        const anomalyMeterFill = document.getElementById('anomalyMeterFill');
+        const anomalyMeterThresholdMarker = document.getElementById('anomalyMeterThresholdMarker');
+        const telemetryQualityChip = document.getElementById('telemetryQualityChip');
+        const tqBlur = document.getElementById('tqBlur');
+        const tqBrightness = document.getElementById('tqBrightness');
+        const tqContrast = document.getElementById('tqContrast');
+        const tqNoise = document.getElementById('tqNoise');
+        const telemetryDevice = document.getElementById('telemetryDevice');
+        const tpFPS = document.getElementById('tpFPS');
+        const tpLatency = document.getElementById('tpLatency');
+        const tpDinov2 = document.getElementById('tpDinov2');
+        const tpPatchcore = document.getElementById('tpPatchcore');
+        const tpTotalInspections = document.getElementById('tpTotalInspections');
+        const tpTotalAnomalies = document.getElementById('tpTotalAnomalies');
+
+        // Human Review elements
+        const btnReviewAnomaly = document.getElementById('btnReviewAnomaly');
+        const btnReviewNormal = document.getElementById('btnReviewNormal');
+        const btnReviewFP = document.getElementById('btnReviewFP');
+        const btnReviewFN = document.getElementById('btnReviewFN');
+        const btnReviewUncertain = document.getElementById('btnReviewUncertain');
+        const reviewNotesInput = document.getElementById('reviewNotesInput');
+        const reviewFeedbackToast = document.getElementById('reviewFeedbackToast');
+
+        // History elements
+        const historyCountBadge = document.getElementById('historyCountBadge');
+        const webcamHistoryTbody = document.getElementById('webcamHistoryTbody');
+        const btnClearHistory = document.getElementById('btnClearHistory');
+
+        // Modal elements
+        const captureModal = document.getElementById('captureModal');
+        const modalBody = document.getElementById('modalBody');
+        const modalCloseBtn = document.getElementById('modalCloseBtn');
+
+        if (!btnWebcamStart) return;
+
+        // State
+        let isInspecting = false;
+        let isPaused = false;
+        let mediaStream = null;
+        let offscreenCanvas = null;
+        let offscreenCtx = null;
+        let loopActive = false;
+        let isProcessingFrame = false;
+        let lastResult = null;
+        let lastRawB64 = null;
+        let serverPollInterval = null;
+        let inspectionCounter = 0;
+        let anomaliesCounter = 0;
+        let activeSessionId = btnWebcamStart.dataset.session || '';
+
+        // Device enumeration helper
+        window.initWebcamDevices = async function () {
+            if (!cameraDeviceSelect) return;
+            cameraDeviceSelect.innerHTML = '';
+
+            const mode = webcamSourceSelect ? webcamSourceSelect.value : 'browser';
+            if (mode === 'browser') {
+                if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                    try {
+                        const devices = await navigator.mediaDevices.enumerateDevices();
+                        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                        if (videoDevices.length > 0) {
+                            videoDevices.forEach((dev, idx) => {
+                                const opt = document.createElement('option');
+                                opt.value = dev.deviceId;
+                                opt.textContent = dev.label || `Camera ${idx + 1}`;
+                                cameraDeviceSelect.appendChild(opt);
+                            });
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('enumerateDevices error:', e);
+                    }
+                }
+                const opt = document.createElement('option');
+                opt.value = 'default';
+                opt.textContent = 'Default Browser Camera';
+                cameraDeviceSelect.appendChild(opt);
+            } else {
+                // Fetch server hardware cameras
+                try {
+                    const resp = await fetch('/api/webcam/cameras');
+                    const data = await resp.json();
+                    if (data.success && data.cameras && data.cameras.length > 0) {
+                        data.cameras.forEach(c => {
+                            const opt = document.createElement('option');
+                            opt.value = c.index;
+                            opt.textContent = c.name;
+                            cameraDeviceSelect.appendChild(opt);
+                        });
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('fetch cameras error:', e);
+                }
+                const opt = document.createElement('option');
+                opt.value = '0';
+                opt.textContent = 'Default Camera Index 0';
+                cameraDeviceSelect.appendChild(opt);
+            }
+        };
+
+        // Source change handler
+        if (webcamSourceSelect) {
+            webcamSourceSelect.addEventListener('change', () => {
+                if (isInspecting) stopInspection();
+                window.initWebcamDevices();
+            });
+        }
+
+        // Sliders
+        if (webcamThresholdInput && webcamThreshVal) {
+            webcamThresholdInput.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value).toFixed(2);
+                webcamThreshVal.textContent = val;
+                if (telemetryThresholdVal) telemetryThresholdVal.textContent = val;
+                if (anomalyMeterThresholdMarker) {
+                    anomalyMeterThresholdMarker.style.left = `${Math.min(100, (parseFloat(val) / 1.0) * 100)}%`;
+                }
+                // Send threshold update to server
+                fetch('/api/webcam/threshold', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ threshold: parseFloat(val) }),
+                }).catch(() => {});
+            });
+        }
+
+        if (webcamTemporalInput && webcamTemporalVal) {
+            webcamTemporalInput.addEventListener('input', (e) => {
+                webcamTemporalVal.textContent = e.target.value;
+            });
+        }
+
+        // Start / Stop toggle
+        btnWebcamStart.addEventListener('click', () => {
+            if (!isInspecting) {
+                startInspection();
+            } else {
+                stopInspection();
+            }
+        });
+
+        // Pause button
+        if (btnWebcamPause) {
+            btnWebcamPause.addEventListener('click', () => {
+                isPaused = !isPaused;
+                btnWebcamPause.classList.toggle('btn-primary', isPaused);
+                btnWebcamPause.innerHTML = isPaused
+                    ? `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume`
+                    : `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause`;
+
+                const mode = webcamSourceSelect.value;
+                if (mode !== 'browser') {
+                    fetch('/api/webcam/pause', { method: 'POST' }).catch(() => {});
+                }
+            });
+        }
+
+        // Capture snapshot button
+        if (btnWebcamCapture) {
+            btnWebcamCapture.addEventListener('click', async () => {
+                btnWebcamCapture.disabled = true;
+                btnWebcamCapture.textContent = 'Saving…';
+                try {
+                    let payload = {
+                        result_meta: lastResult || {},
+                    };
+
+                    if (lastRawB64) {
+                        payload.raw_frame = lastRawB64;
+                    }
+                    if (lastResult && lastResult.overlay_base64) {
+                        payload.annotated_frame = lastResult.overlay_base64;
+                    }
+                    if (lastResult && lastResult.heatmap_base64) {
+                        payload.heatmap_frame = lastResult.heatmap_base64;
+                    }
+
+                    const resp = await fetch('/api/webcam/capture', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    const res = await resp.json();
+
+                    if (res.success) {
+                        showReviewToast(`Capture saved: #${res.capture_id}`, false);
+                        loadHistory();
+                    } else {
+                        showReviewToast(res.error || 'Capture failed', true);
+                    }
+                } catch (err) {
+                    showReviewToast(err.message, true);
+                } finally {
+                    btnWebcamCapture.disabled = false;
+                    btnWebcamCapture.innerHTML = `
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19 4h-3.5L14 2H10L8.5 4H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/></svg>
+                        Capture Snapshot
+                    `;
+                }
+            });
+        }
+
+        // Reset counters
+        if (btnWebcamReset) {
+            btnWebcamReset.addEventListener('click', () => {
+                inspectionCounter = 0;
+                anomaliesCounter = 0;
+                if (tpTotalInspections) tpTotalInspections.textContent = '0';
+                if (tpTotalAnomalies) tpTotalAnomalies.textContent = '0';
+            });
+        }
+
+        // Active ROI helper
+        function getRoiSpec() {
+            const mode = webcamRoiMode ? webcamRoiMode.value : 'center';
+            if (mode === 'center') {
+                return [0.10, 0.10, 0.90, 0.90]; // Centered 80% box
+            }
+            if (mode === 'auto') {
+                return null;
+            }
+            return null; // Full frame
+        }
+
+        // Start Inspection implementation
+        async function startInspection() {
+            const source = webcamSourceSelect ? webcamSourceSelect.value : 'browser';
+
+            btnWebcamStart.disabled = true;
+            btnWebcamStart.textContent = 'Starting…';
+
+            try {
+                if (source === 'browser') {
+                    // Browser WebRTC camera
+                    const deviceId = cameraDeviceSelect ? cameraDeviceSelect.value : null;
+                    const constraints = {
+                        video: {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                        },
+                        audio: false,
+                    };
+                    if (deviceId && deviceId !== 'default') {
+                        constraints.video.deviceId = { exact: deviceId };
+                    }
+
+                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    webcamVideo.srcObject = mediaStream;
+                    await webcamVideo.play();
+
+                    webcamVideo.classList.remove('hidden');
+                    webcamServerStream.classList.add('hidden');
+                    webcamPlaceholder.classList.add('hidden');
+
+                    // Setup offscreen canvas for capturing frames
+                    offscreenCanvas = document.createElement('canvas');
+                    offscreenCtx = offscreenCanvas.getContext('2d');
+
+                    isInspecting = true;
+                    isPaused = false;
+                    loopActive = true;
+                    runBrowserInspectionLoop();
+
+                } else {
+                    // Server Hardware Camera or Simulated Test Stream
+                    const mode = source === 'simulated' ? 'simulated' : 'hardware';
+                    const camIdx = cameraDeviceSelect ? parseInt(cameraDeviceSelect.value || '0', 10) : 0;
+
+                    const resp = await fetch('/api/webcam/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            session_id: activeSessionId,
+                            mode: mode,
+                            camera_index: camIdx,
+                            roi: getRoiSpec(),
+                            auto_roi: webcamRoiMode && webcamRoiMode.value === 'auto',
+                            target_fps: 15,
+                        }),
+                    });
+                    const res = await resp.json();
+                    if (!res.success) {
+                        throw new Error(res.error || 'Failed to start camera on server.');
+                    }
+
+                    // Display MJPEG stream
+                    webcamServerStream.src = `/api/webcam/stream?t=${Date.now()}`;
+                    webcamServerStream.classList.remove('hidden');
+                    webcamVideo.classList.add('hidden');
+                    webcamPlaceholder.classList.add('hidden');
+
+                    isInspecting = true;
+                    isPaused = false;
+                    startServerStatusPolling();
+                }
+
+                btnWebcamStart.classList.replace('btn-primary', 'btn-secondary');
+                btnWebcamStart.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> Stop Inspection`;
+                btnWebcamStart.disabled = false;
+                if (btnWebcamPause) btnWebcamPause.disabled = false;
+                if (btnWebcamCapture) btnWebcamCapture.disabled = false;
+                updateVerdictBadge('NORMAL', 'Inspecting');
+
+            } catch (err) {
+                console.error('Start inspection error:', err);
+                showError(err.message || 'Unable to access camera.');
+                stopInspection();
+            }
+        }
+
+        // Stop Inspection implementation
+        function stopInspection() {
+            loopActive = false;
+            isInspecting = false;
+            isPaused = false;
+
+            if (serverPollInterval) {
+                clearInterval(serverPollInterval);
+                serverPollInterval = null;
+            }
+
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(t => t.stop());
+                mediaStream = null;
+            }
+            if (webcamVideo) {
+                webcamVideo.srcObject = null;
+                webcamVideo.classList.add('hidden');
+            }
+            if (webcamServerStream) {
+                webcamServerStream.src = '';
+                webcamServerStream.classList.add('hidden');
+            }
+            if (webcamPlaceholder) {
+                webcamPlaceholder.classList.remove('hidden');
+            }
+
+            // Clear overlay canvas
+            if (webcamOverlayCanvas) {
+                const ctx = webcamOverlayCanvas.getContext('2d');
+                ctx.clearRect(0, 0, webcamOverlayCanvas.width, webcamOverlayCanvas.height);
+            }
+
+            // Stop server camera if running
+            fetch('/api/webcam/stop', { method: 'POST' }).catch(() => {});
+
+            btnWebcamStart.classList.replace('btn-secondary', 'btn-primary');
+            btnWebcamStart.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Inspection`;
+            btnWebcamStart.disabled = false;
+            if (btnWebcamPause) {
+                btnWebcamPause.disabled = true;
+                btnWebcamPause.classList.remove('btn-primary');
+                btnWebcamPause.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause`;
+            }
+            if (btnWebcamCapture) btnWebcamCapture.disabled = true;
+
+            updateVerdictBadge('IDLE', 'READY');
+            if (webcamWarningBanner) webcamWarningBanner.classList.add('hidden');
+        }
+
+        // Controlled Frame Sampling Loop (Zero Queue Backlog)
+        async function runBrowserInspectionLoop() {
+            if (!loopActive) return;
+
+            if (!isPaused && !isProcessingFrame && webcamVideo && webcamVideo.readyState >= 2) {
+                isProcessingFrame = true;
+                try {
+                    const vw = webcamVideo.videoWidth || 640;
+                    const vh = webcamVideo.videoHeight || 360;
+
+                    // Match canvas dimensions to video
+                    if (offscreenCanvas.width !== vw || offscreenCanvas.height !== vh) {
+                        offscreenCanvas.width = vw;
+                        offscreenCanvas.height = vh;
+                    }
+
+                    offscreenCtx.drawImage(webcamVideo, 0, 0, vw, vh);
+                    const b64Frame = offscreenCanvas.toDataURL('image/jpeg', 0.85);
+                    lastRawB64 = b64Frame;
+
+                    const thresh = webcamThresholdInput ? parseFloat(webcamThresholdInput.value) : 0.50;
+                    const roi = getRoiSpec();
+                    const autoRoi = webcamRoiMode && webcamRoiMode.value === 'auto';
+
+                    const resp = await fetch('/api/webcam/inspect_frame', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            frame: b64Frame,
+                            session_id: activeSessionId,
+                            roi: roi,
+                            auto_roi: autoRoi,
+                            threshold: thresh,
+                        }),
+                    });
+
+                    if (resp.ok) {
+                        const res = await resp.json();
+                        if (res.success) {
+                            lastResult = res;
+                            renderInspectionTelemetry(res);
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Frame inspection network/compute error:', err);
+                } finally {
+                    isProcessingFrame = false;
+                }
+            }
+
+            if (loopActive) {
+                // Schedule next frame with a gentle timeout to allow browser UI thread to breathe
+                setTimeout(() => requestAnimationFrame(runBrowserInspectionLoop), 30);
+            }
+        }
+
+        // Poll server status when in hardware or simulated stream mode
+        function startServerStatusPolling() {
+            if (serverPollInterval) clearInterval(serverPollInterval);
+            serverPollInterval = setInterval(async () => {
+                if (!isInspecting) return;
+                try {
+                    const resp = await fetch('/api/webcam/status');
+                    const data = await resp.json();
+                    if (data.success && data.camera) {
+                        if (tpFPS) tpFPS.textContent = data.camera.measured_fps ? data.camera.measured_fps.toFixed(1) : '—';
+                        if (tpTotalInspections) tpTotalInspections.textContent = data.inspector.total_inspections;
+                        if (tpTotalAnomalies) tpTotalAnomalies.textContent = data.inspector.total_anomalies;
+                    }
+                } catch (e) {
+                    console.warn('Server status poll error:', e);
+                }
+            }, 800);
+        }
+
+        // Render Telemetry & Overlay Canvas
+        function renderInspectionTelemetry(res) {
+            inspectionCounter++;
+            if (res.status === 'ANOMALY') anomaliesCounter++;
+
+            // 1. Verdict badge
+            updateVerdictBadge(res.status, res.status);
+
+            // 2. Score & Meter
+            if (telemetryAnomalyScore) telemetryAnomalyScore.textContent = res.stabilized_score.toFixed(3);
+            if (telemetryRawScore) telemetryRawScore.textContent = res.score.toFixed(3);
+            if (telemetryThresholdVal) telemetryThresholdVal.textContent = res.threshold.toFixed(2);
+            if (telemetryAreaPct) telemetryAreaPct.textContent = `${res.anomaly_area_percent.toFixed(1)}%`;
+
+            if (anomalyMeterFill) {
+                const fillPct = Math.min(100, Math.max(0, (res.stabilized_score / 1.0) * 100));
+                anomalyMeterFill.style.width = `${fillPct}%`;
+            }
+
+            // 3. Technical Quality
+            if (res.quality) {
+                if (telemetryQualityChip) {
+                    telemetryQualityChip.textContent = res.quality.status;
+                    telemetryQualityChip.className = `quality-chip chip-${res.quality.status.toLowerCase()}`;
+                }
+                if (tqBlur) tqBlur.textContent = res.quality.blur.toFixed(1);
+                if (tqBrightness) tqBrightness.textContent = res.quality.brightness.toFixed(0);
+                if (tqContrast) tqContrast.textContent = res.quality.contrast.toFixed(1);
+                if (tqNoise) tqNoise.textContent = res.quality.noise.toFixed(2);
+
+                if (webcamWarningBanner) {
+                    if (res.quality.status === 'BAD' || res.status === 'QUALITY WARNING') {
+                        webcamWarningBanner.textContent = res.quality.message || 'IMAGE QUALITY TOO LOW';
+                        webcamWarningBanner.classList.remove('hidden');
+                    } else {
+                        webcamWarningBanner.classList.add('hidden');
+                    }
+                }
+            }
+
+            // 4. Performance & Hardware
+            if (telemetryDevice) telemetryDevice.textContent = res.device || 'CPU';
+            if (tpFPS) tpFPS.textContent = res.fps ? res.fps.toFixed(1) : '—';
+            if (tpLatency) tpLatency.textContent = `${res.latency_ms.toFixed(0)} ms`;
+            if (tpDinov2 && res.timings) tpDinov2.textContent = `${res.timings.dinov2_ms.toFixed(0)} ms`;
+            if (tpPatchcore && res.timings) tpPatchcore.textContent = `${res.timings.patchcore_ms.toFixed(0)} ms`;
+            if (tpTotalInspections) tpTotalInspections.textContent = res.total_inspections || inspectionCounter;
+            if (tpTotalAnomalies) tpTotalAnomalies.textContent = res.total_anomalies || anomaliesCounter;
+
+            // 5. Draw overlay onto Canvas
+            if (webcamOverlayCanvas && res.overlay_base64) {
+                const ctx = webcamOverlayCanvas.getContext('2d');
+                const overlayImg = new Image();
+                overlayImg.onload = () => {
+                    const cw = webcamViewport.clientWidth || 640;
+                    const ch = webcamViewport.clientHeight || 360;
+                    if (webcamOverlayCanvas.width !== cw || webcamOverlayCanvas.height !== ch) {
+                        webcamOverlayCanvas.width = cw;
+                        webcamOverlayCanvas.height = ch;
+                    }
+                    ctx.clearRect(0, 0, cw, ch);
+                    ctx.drawImage(overlayImg, 0, 0, cw, ch);
+                };
+                overlayImg.src = res.overlay_base64;
+            }
+        }
+
+        function updateVerdictBadge(status, label) {
+            if (!webcamVerdictBadge) return;
+            webcamVerdictBadge.textContent = label;
+            webcamVerdictBadge.className = 'webcam-verdict-badge';
+
+            if (status === 'ANOMALY') {
+                webcamVerdictBadge.classList.add('verdict-anomaly');
+            } else if (status === 'QUALITY WARNING') {
+                webcamVerdictBadge.classList.add('verdict-warning');
+            } else if (status === 'NORMAL') {
+                webcamVerdictBadge.classList.add('verdict-normal');
+            } else {
+                webcamVerdictBadge.classList.add('verdict-idle');
+            }
+        }
+
+        function showReviewToast(msg, isError) {
+            if (!reviewFeedbackToast) return;
+            reviewFeedbackToast.textContent = msg;
+            reviewFeedbackToast.style.borderColor = isError ? 'hsl(355, 75%, 45%)' : 'hsl(145, 70%, 45%)';
+            reviewFeedbackToast.style.color = isError ? 'hsl(355, 80%, 75%)' : 'hsl(145, 70%, 75%)';
+            reviewFeedbackToast.classList.remove('hidden');
+            setTimeout(() => reviewFeedbackToast.classList.add('hidden'), 4000);
+        }
+
+        // Human Review action triggers
+        async function submitReview(expertLabel) {
+            const notes = reviewNotesInput ? reviewNotesInput.value.trim() : '';
+            const pred = lastResult ? lastResult.status : 'NORMAL';
+            const score = lastResult ? lastResult.score : 0.0;
+            const qScore = (lastResult && lastResult.quality) ? lastResult.quality.quality_score : 0.0;
+
+            const payload = {
+                expert_label: expertLabel,
+                model_prediction: pred,
+                model_score: score,
+                quality_score: qScore,
+                notes: notes,
+            };
+            if (lastRawB64) {
+                payload.frame = lastRawB64;
+            }
+
+            try {
+                const resp = await fetch('/api/webcam/review', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showReviewToast(`Feedback saved: [${data.review_status}] in ${data.category}`, false);
+                    if (reviewNotesInput) reviewNotesInput.value = '';
+                    loadHistory();
+                } else {
+                    showReviewToast(data.error || 'Failed to save review', true);
+                }
+            } catch (err) {
+                showReviewToast(err.message, true);
+            }
+        }
+
+        if (btnReviewAnomaly) btnReviewAnomaly.addEventListener('click', () => submitReview('CONFIRM_ANOMALY'));
+        if (btnReviewNormal) btnReviewNormal.addEventListener('click', () => submitReview('MARK_NORMAL'));
+        if (btnReviewFP) btnReviewFP.addEventListener('click', () => submitReview('FALSE_POSITIVE'));
+        if (btnReviewFN) btnReviewFN.addEventListener('click', () => submitReview('FALSE_NEGATIVE'));
+        if (btnReviewUncertain) btnReviewUncertain.addEventListener('click', () => submitReview('UNCERTAIN'));
+
+        // History Management
+        async function loadHistory() {
+            if (!webcamHistoryTbody) return;
+            try {
+                const resp = await fetch('/api/webcam/history');
+                const data = await resp.json();
+                if (data.success && data.history) {
+                    renderHistoryTable(data.history);
+                }
+            } catch (e) {
+                console.warn('Load history error:', e);
+            }
+        }
+
+        function renderHistoryTable(items) {
+            if (!webcamHistoryTbody) return;
+            webcamHistoryTbody.innerHTML = '';
+
+            if (historyCountBadge) {
+                historyCountBadge.textContent = `${items.length} records`;
+            }
+
+            if (items.length === 0) {
+                webcamHistoryTbody.innerHTML = `
+                    <tr class="history-empty-row">
+                        <td colspan="8">No inspections captured yet. Use "Capture Snapshot" or start continuous inspection.</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                const statusClass = item.status === 'ANOMALY' ? 'chip-anomalous' : (item.status === 'QUALITY WARNING' ? 'chip-suspicious' : 'chip-normal');
+                const qualityClass = (item.quality || 'GOOD').toLowerCase();
+
+                tr.innerHTML = `
+                    <td><code>${item.id}</code></td>
+                    <td>${item.timestamp}</td>
+                    <td><span class="summary-chip ${statusClass}" style="padding:2px 8px;font-size:0.75rem">${item.status}</span></td>
+                    <td><strong>${typeof item.score === 'number' ? item.score.toFixed(3) : item.score}</strong></td>
+                    <td><span class="quality-chip chip-${qualityClass}">${item.quality || '—'}</span></td>
+                    <td>${typeof item.latency_ms === 'number' ? item.latency_ms.toFixed(0) : item.latency_ms} ms</td>
+                    <td><span style="font-size:0.8rem;color:hsl(220,15%,75%)">${item.expert_decision || 'Unreviewed'}</span></td>
+                    <td>
+                        <button type="button" class="btn-ghost btn-sm view-snap-btn" data-id="${item.id}" data-dir="${item.capture_dir || ''}">
+                            View
+                        </button>
+                    </td>
+                `;
+                webcamHistoryTbody.appendChild(tr);
+            });
+
+            // Bind view buttons
+            document.querySelectorAll('.view-snap-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const snapId = btn.dataset.id;
+                    const snapDir = btn.dataset.dir;
+                    openCaptureModal(snapId, snapDir);
+                });
+            });
+        }
+
+        // Clear History
+        if (btnClearHistory) {
+            btnClearHistory.addEventListener('click', async () => {
+                if (!confirm('Clear all inspection history records?')) return;
+                try {
+                    await fetch('/api/webcam/history/clear', { method: 'POST' });
+                    loadHistory();
+                } catch (e) {
+                    showError(e.message);
+                }
+            });
+        }
+
+        // Modal handling
+        function openCaptureModal(snapId, snapDir) {
+            if (!captureModal || !modalBody) return;
+            modalBody.innerHTML = `
+                <div style="display:flex;flex-direction:column;gap:18px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <h4 style="margin:0;color:hsl(220,15%,90%)">Capture ID: <code>${snapId}</code></h4>
+                        <span style="font-size:0.8rem;color:hsl(220,15%,60%)">Folder: ${snapDir}</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:16px;">
+                        <div>
+                            <div style="font-size:0.76rem;font-weight:700;margin-bottom:6px;color:hsl(220,15%,65%)">RAW CAPTURE</div>
+                            <img src="/data/inspection_results/${snapDir}/raw.jpg" alt="Raw frame" style="width:100%;border-radius:8px;border:1px solid hsl(220,20%,20%)" onerror="this.src='/static/img/placeholder.png'">
+                        </div>
+                        <div>
+                            <div style="font-size:0.76rem;font-weight:700;margin-bottom:6px;color:hsl(220,15%,65%)">ANNOTATED OVERLAY</div>
+                            <img src="/data/inspection_results/${snapDir}/annotated.jpg" alt="Annotated frame" style="width:100%;border-radius:8px;border:1px solid hsl(220,20%,20%)" onerror="this.src='/static/img/placeholder.png'">
+                        </div>
+                        <div>
+                            <div style="font-size:0.76rem;font-weight:700;margin-bottom:6px;color:hsl(220,15%,65%)">HEATMAP (JET)</div>
+                            <img src="/data/inspection_results/${snapDir}/heatmap.jpg" alt="Heatmap" style="width:100%;border-radius:8px;border:1px solid hsl(220,20%,20%)" onerror="this.src='/static/img/placeholder.png'">
+                        </div>
+                    </div>
+                </div>
+            `;
+            captureModal.classList.remove('hidden');
+        }
+
+        if (modalCloseBtn) {
+            modalCloseBtn.addEventListener('click', () => {
+                if (captureModal) captureModal.classList.add('hidden');
+            });
+        }
+        if (captureModal) {
+            captureModal.addEventListener('click', (e) => {
+                if (e.target === captureModal) captureModal.classList.add('hidden');
+            });
+        }
+
+        // Initialize history on load
+        loadHistory();
+    })();
+
     // Close button for frame detail
     const frameDetailClose = document.getElementById('frameDetailClose');
     if (frameDetailClose) {
@@ -871,3 +1600,4 @@
     }
 
 })();
+

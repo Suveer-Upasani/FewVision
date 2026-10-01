@@ -2440,3 +2440,608 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85em; }
     padding: 12px 0;
 }
 
+/* ===========================================================================
+   Live Webcam Inspection Studio
+   =========================================================================== */
+
+.webcam-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px 20px;
+    background: hsl(222, 24%, 10%);
+    border: 1px solid hsl(220, 20%, 18%);
+    border-radius: 12px;
+    padding: 14px 20px;
+    margin-bottom: 20px;
+}
+
+.webcam-toolbar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 140px;
+}
+
+.webcam-lbl {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: hsl(220, 15%, 65%);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.webcam-select {
+    background: hsl(220, 22%, 14%);
+    border: 1px solid hsl(220, 20%, 26%);
+    color: hsl(220, 15%, 92%);
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 0.84rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.webcam-select:focus {
+    border-color: var(--clr-primary, #6366f1);
+}
+
+.webcam-slider {
+    width: 140px;
+    accent-color: var(--clr-primary, #6366f1);
+    cursor: pointer;
+}
+
+.webcam-studio-grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 22px;
+    margin-bottom: 24px;
+}
+
+@media (max-width: 1100px) {
+    .webcam-studio-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Viewport Card */
+.webcam-viewport-card {
+    background: hsl(222, 24%, 9%);
+    border: 1px solid hsl(220, 20%, 18%);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+
+.webcam-viewport-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #08090d;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid hsl(220, 20%, 16%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.webcam-media {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+
+.webcam-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.webcam-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+    color: hsl(220, 15%, 55%);
+    z-index: 2;
+}
+
+.webcam-placeholder-icon {
+    font-size: 2.8rem;
+    margin-bottom: 8px;
+    opacity: 0.6;
+}
+
+.webcam-placeholder h3 {
+    font-size: 1.15rem;
+    color: hsl(220, 15%, 85%);
+    margin: 0 0 6px;
+}
+
+.webcam-placeholder p {
+    font-size: 0.86rem;
+    max-width: 340px;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.webcam-verdict-badge {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    z-index: 10;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    transition: all 0.2s ease;
+}
+
+.verdict-idle {
+    background: hsl(220, 15%, 22%);
+    color: hsl(220, 15%, 70%);
+    border: 1px solid hsl(220, 15%, 32%);
+}
+
+.verdict-normal {
+    background: hsla(145, 80%, 40%, 0.9);
+    color: #fff;
+    border: 1px solid hsl(145, 80%, 55%);
+    box-shadow: 0 0 20px hsla(145, 80%, 45%, 0.45);
+}
+
+.verdict-anomaly {
+    background: hsla(355, 85%, 45%, 0.95);
+    color: #fff;
+    border: 1px solid hsl(355, 85%, 60%);
+    box-shadow: 0 0 22px hsla(355, 85%, 50%, 0.55);
+    animation: pulseAnomaly 1.2s infinite alternate ease-in-out;
+}
+
+@keyframes pulseAnomaly {
+    from { box-shadow: 0 0 12px hsla(355, 85%, 50%, 0.4); }
+    to   { box-shadow: 0 0 28px hsla(355, 85%, 60%, 0.8); }
+}
+
+.verdict-warning {
+    background: hsla(38, 95%, 45%, 0.9);
+    color: #111;
+    border: 1px solid hsl(38, 95%, 60%);
+    box-shadow: 0 0 18px hsla(38, 95%, 50%, 0.4);
+}
+
+.webcam-warning-banner {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    right: 14px;
+    background: hsla(38, 90%, 15%, 0.92);
+    border: 1px solid hsl(38, 90%, 45%);
+    color: hsl(38, 95%, 85%);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    z-index: 10;
+    backdrop-filter: blur(8px);
+}
+
+/* Controls Strip */
+.webcam-controls-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-webcam-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 18px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+/* Telemetry Panel */
+.webcam-telemetry-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.telemetry-card {
+    background: hsl(222, 24%, 10%);
+    border: 1px solid hsl(220, 20%, 18%);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+
+.telemetry-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.telemetry-card-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: hsl(220, 15%, 60%);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+.telemetry-score-row {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.telemetry-big-score {
+    font-size: 2.2rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: hsl(220, 15%, 95%);
+    line-height: 1;
+}
+
+.telemetry-score-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.telemetry-sub-lbl {
+    font-size: 0.78rem;
+    color: hsl(220, 15%, 60%);
+}
+
+.telemetry-sub-lbl strong {
+    color: hsl(220, 15%, 88%);
+}
+
+.anomaly-meter-track {
+    position: relative;
+    height: 8px;
+    background: hsl(220, 20%, 16%);
+    border-radius: 6px;
+    overflow: visible;
+}
+
+.anomaly-meter-fill {
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #10b981 0%, #f59e0b 60%, #ef4444 100%);
+    transition: width 0.25s ease-out;
+}
+
+.anomaly-meter-threshold {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    width: 3px;
+    background: #fff;
+    border-radius: 2px;
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+}
+
+/* Quality Grid */
+.telemetry-quality-grid,
+.telemetry-perf-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 12px;
+}
+
+.telemetry-q-item,
+.telemetry-perf-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.tq-lbl, .tp-lbl {
+    font-size: 0.72rem;
+    color: hsl(220, 15%, 55%);
+}
+
+.tq-val, .tp-val {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: hsl(220, 15%, 85%);
+}
+
+.quality-chip {
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.chip-good { background: hsla(145, 70%, 40%, 0.18); color: hsl(145, 70%, 55%); border: 1px solid hsla(145, 70%, 50%, 0.3); }
+.chip-warning { background: hsla(38, 90%, 45%, 0.18); color: hsl(38, 90%, 65%); border: 1px solid hsla(38, 90%, 50%, 0.3); }
+.chip-bad { background: hsla(355, 75%, 45%, 0.18); color: hsl(355, 75%, 65%); border: 1px solid hsla(355, 75%, 50%, 0.3); }
+
+.device-badge {
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: hsl(220, 18%, 18%);
+    color: hsl(220, 15%, 75%);
+    border: 1px solid hsl(220, 18%, 28%);
+}
+
+.telemetry-stats-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid hsl(220, 20%, 15%);
+    font-size: 0.76rem;
+    color: hsl(220, 15%, 55%);
+}
+
+.telemetry-stats-footer strong {
+    color: hsl(220, 15%, 85%);
+}
+
+/* Human Review Card */
+.human-review-card {
+    border-color: hsl(220, 20%, 22%);
+    background: hsl(222, 24%, 11%);
+}
+
+.human-review-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 10px;
+}
+
+.btn-review {
+    padding: 6px 11px;
+    border-radius: 7px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.btn-review-anomaly {
+    background: hsla(355, 75%, 45%, 0.16);
+    border-color: hsla(355, 75%, 50%, 0.35);
+    color: hsl(355, 80%, 75%);
+}
+.btn-review-anomaly:hover {
+    background: hsl(355, 75%, 45%);
+    color: #fff;
+}
+
+.btn-review-normal {
+    background: hsla(145, 65%, 40%, 0.16);
+    border-color: hsla(145, 65%, 45%, 0.35);
+    color: hsl(145, 70%, 70%);
+}
+.btn-review-normal:hover {
+    background: hsl(145, 65%, 40%);
+    color: #fff;
+}
+
+.btn-review-fp {
+    background: hsla(38, 90%, 45%, 0.16);
+    border-color: hsla(38, 90%, 50%, 0.35);
+    color: hsl(38, 90%, 75%);
+}
+.btn-review-fp:hover {
+    background: hsl(38, 90%, 45%);
+    color: #111;
+}
+
+.btn-review-fn {
+    background: hsla(270, 70%, 50%, 0.16);
+    border-color: hsla(270, 70%, 55%, 0.35);
+    color: hsl(270, 75%, 78%);
+}
+.btn-review-fn:hover {
+    background: hsl(270, 70%, 50%);
+    color: #fff;
+}
+
+.btn-review-uncertain {
+    background: hsl(220, 16%, 18%);
+    border-color: hsl(220, 16%, 28%);
+    color: hsl(220, 15%, 72%);
+}
+.btn-review-uncertain:hover {
+    background: hsl(220, 16%, 26%);
+    color: #fff;
+}
+
+.review-notes-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: hsl(220, 22%, 14%);
+    border: 1px solid hsl(220, 20%, 24%);
+    color: hsl(220, 15%, 88%);
+    padding: 7px 11px;
+    border-radius: 7px;
+    font-size: 0.8rem;
+    font-family: inherit;
+    outline: none;
+}
+
+.review-notes-input:focus {
+    border-color: var(--clr-primary, #6366f1);
+}
+
+.review-feedback-toast {
+    margin-top: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.76rem;
+    background: hsla(145, 70%, 40%, 0.15);
+    border: 1px solid hsla(145, 70%, 50%, 0.3);
+    color: hsl(145, 70%, 75%);
+}
+
+/* History Card & Table */
+.webcam-history-card {
+    background: hsl(222, 24%, 10%);
+    border: 1px solid hsl(220, 20%, 18%);
+    border-radius: 14px;
+    padding: 20px;
+}
+
+.history-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.history-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.history-title-group h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: hsl(220, 15%, 90%);
+    margin: 0;
+}
+
+.history-count-badge {
+    background: hsl(220, 18%, 18%);
+    border: 1px solid hsl(220, 18%, 26%);
+    color: hsl(220, 15%, 70%);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.74rem;
+}
+
+.history-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.history-table-container {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid hsl(220, 20%, 16%);
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    text-align: left;
+}
+
+.history-table th {
+    background: hsl(220, 24%, 12%);
+    color: hsl(220, 15%, 60%);
+    padding: 10px 14px;
+    font-weight: 600;
+    border-bottom: 1px solid hsl(220, 20%, 18%);
+}
+
+.history-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid hsl(220, 20%, 14%);
+    color: hsl(220, 15%, 82%);
+}
+
+.history-table tr:hover {
+    background: hsl(220, 20%, 13%);
+}
+
+.history-empty-row td {
+    text-align: center;
+    padding: 26px;
+    color: hsl(220, 15%, 50%);
+}
+
+/* Modal */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 20px;
+}
+
+.modal-card {
+    background: hsl(222, 24%, 12%);
+    border: 1px solid hsl(220, 20%, 24%);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 820px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid hsl(220, 20%, 18%);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: hsl(220, 15%, 92%);
+}
+
+.modal-close-btn {
+    background: transparent;
+    border: none;
+    color: hsl(220, 15%, 60%);
+    font-size: 1.6rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.modal-close-btn:hover {
+    color: #fff;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+

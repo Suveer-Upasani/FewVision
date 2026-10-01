@@ -96,6 +96,7 @@ ENABLE_MEMORY_BANK = os.environ.get("FEWVISION_MEMORY_BANK", "true").lower() == 
 # Directory where memory bank data is persisted.
 # Each session gets its own subdirectory: data/memory_bank/{session_id}/
 MEMORY_BANK_FOLDER = os.path.join(DATA_FOLDER, "memory_bank")
+MEMORY_BANKS_FOLDER = MEMORY_BANK_FOLDER
 
 # ---------------------------------------------------------------------------
 # Similarity Engine
@@ -221,3 +222,45 @@ TEMPORAL_THRESHOLD = float(os.environ.get("FEWVISION_TEMPORAL_THRESHOLD", "0.5")
 # When True, the extracted video frames and their heatmap / overlay outputs
 # are written to disk under data/inspection/{session_id}/video/{run_id}/.
 SAVE_VIDEO_FRAMES = os.environ.get("FEWVISION_SAVE_VIDEO_FRAMES", "true").lower() == "true"
+
+
+# ---------------------------------------------------------------------------
+# Live Webcam Inspection
+# ---------------------------------------------------------------------------
+# Master switch for live webcam inspection
+WEBCAM_ENABLED = os.environ.get("FEWVISION_WEBCAM_ENABLED", "true").lower() == "true"
+
+# Default camera index (0 = default integrated or primary external camera)
+CAMERA_INDEX = int(os.environ.get("FEWVISION_CAMERA_INDEX", "0"))
+
+# Requested resolution (camera hardware will negotiate closest supported resolution)
+FRAME_WIDTH = int(os.environ.get("FEWVISION_FRAME_WIDTH", "1280"))
+FRAME_HEIGHT = int(os.environ.get("FEWVISION_FRAME_HEIGHT", "720"))
+
+# Target FPS for live webcam capture & stream
+TARGET_FPS = int(os.environ.get("FEWVISION_TARGET_FPS", "15"))
+
+# Temporal stabilization window (number of past frame anomaly scores to track)
+TEMPORAL_WINDOW = int(os.environ.get("FEWVISION_TEMPORAL_WINDOW", "5"))
+
+# Fraction of anomalous votes in window required to transition stabilized state to ANOMALY
+ANOMALY_VOTE_THRESHOLD = float(os.environ.get("FEWVISION_ANOMALY_VOTE_THRESH", "0.6"))
+
+# Frame quality evaluation thresholds for webcam frames
+QUALITY_BLUR_THRESHOLD = float(os.environ.get("FEWVISION_QUALITY_BLUR_THRESH", "30.0"))
+QUALITY_BRIGHTNESS_MIN = float(os.environ.get("FEWVISION_QUALITY_BRIGHTNESS_MIN", "40.0"))
+QUALITY_BRIGHTNESS_MAX = float(os.environ.get("FEWVISION_QUALITY_BRIGHTNESS_MAX", "220.0"))
+QUALITY_CONTRAST_THRESHOLD = float(os.environ.get("FEWVISION_QUALITY_CONTRAST_THRESH", "20.0"))
+
+QUALITY_CONFIG = {
+    "blur_threshold": QUALITY_BLUR_THRESHOLD,
+    "brightness_min": QUALITY_BRIGHTNESS_MIN,
+    "brightness_max": QUALITY_BRIGHTNESS_MAX,
+    "contrast_threshold": QUALITY_CONTRAST_THRESHOLD,
+}
+
+# Directories for human feedback and inspection captures
+FEEDBACK_FOLDER = os.path.join(DATA_FOLDER, "feedback")
+CAPTURES_FOLDER = os.path.join(DATA_FOLDER, "inspection_results")
+TEST_STREAM_FOLDER = os.path.join(BASE_DIR, "Tiles_dataset", "test", "cracks")
+

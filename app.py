@@ -25,6 +25,11 @@ import os
 import logging
 import datetime
 import uuid
+import base64
+import threading
+import time
+import cv2
+import numpy as np
 
 from flask import (
     Flask,
@@ -35,6 +40,7 @@ from flask import (
     redirect,
     url_for,
     session,
+    Response,
 )
 from werkzeug.utils import secure_filename
 
@@ -69,6 +75,9 @@ def create_app() -> Flask:
     ensure_dir(config.TEMP_FOLDER)
     ensure_dir(config.MEMORY_BANK_FOLDER)
     ensure_dir(config.INFERENCE_FOLDER)
+    ensure_dir(getattr(config, "FEEDBACK_FOLDER", os.path.join(config.DATA_FOLDER, "feedback")))
+    ensure_dir(getattr(config, "CAPTURES_FOLDER", os.path.join(config.DATA_FOLDER, "inspection_results")))
+
 
     # ---------------------------------------------------------------------------
     # Logging
@@ -855,7 +864,521 @@ def create_app() -> Flask:
 
         return jsonify({"error": f"Image '{image_name}' not found in latest run."}), 404
 
+    # ---------------------------------------------------------------------------
+    # Live Webcam Inspection API routes
+    # ---------------------------------------------------------------------------
+    from modules.webcam import (
+        WebcamManager,
+        list_available_cameras,
+        LiveWebcamInspector,
+        FeedbackStore,
+    )
+
+    webcam_state = {
+        "manager": None,
+        "inspector": None,
+        "feedback_store": FeedbackStore(),
+        "stream_thread": None,
+        "stream_stop_event": threading.Event(),
+        "active_roi": None,
+        "auto_roi": False,
+        "active_session_id": None,
+    }
+
+    def _get_or_init_inspector(sid: str) -> LiveWebcamInspector:
+        """Reuse existing LiveWebcamInspector for session or initialize once."""
+        if (
+            webcam_state["inspector"] is not None
+            and webcam_state["inspector"].session_id == sid
+        ):
+            return webcam_state["inspector"]
+
+        app_logger.info("Initializing LiveWebcamInspector for session %s (Single-Load)", sid)
+        inspector = LiveWebcamInspector(sid)
+        webcam_state["inspector"] = inspector
+        webcam_state["active_session_id"] = sid
+        return inspector
+
+    def _webcam_background_inference_loop():
+        """Background worker running model inference on latest camera frames for MJPEG stream."""
+        app_logger.info("Webcam background inference stream worker started.")
+        mgr = webcam_state["manager"]
+        while not webcam_state["stream_stop_event"].is_set():
+            if mgr is None or not mgr.is_running:
+                break
+            if mgr.is_paused:
+                time.sleep(0.05)
+                continue
+
+            success, frame, ts = mgr.get_latest_frame()
+            if success and frame is not None and frame.size > 0:
+                inspector = webcam_state["inspector"]
+                if inspector is not None:
+                    try:
+                        res = inspector.inspect_frame(
+                            frame,
+                            roi_spec=webcam_state["active_roi"],
+                            auto_roi=webcam_state["auto_roi"],
+                        )
+                        mgr.update_latest_result(res["_annotated_frame"], res)
+                    except Exception as err:
+                        app_logger.error("Error in webcam background inference: %s", err)
+
+            # Limit inference rate to avoid burning CPU unnecessarily
+            time.sleep(0.04)
+
+        app_logger.info("Webcam background inference stream worker stopped.")
+
+    @app.route("/api/webcam/status")
+    def webcam_status():
+        """Return status of webcam capture and active model inspector."""
+        mgr = webcam_state["manager"]
+        mgr_status = mgr.get_status() if mgr is not None else {"is_running": False}
+
+        inspector = webcam_state["inspector"]
+        insp_status = {
+            "has_inspector": inspector is not None,
+            "session_id": webcam_state["active_session_id"],
+            "device": getattr(inspector, "device", "CPU") if inspector else "CPU",
+            "threshold": inspector.patch_threshold if inspector else config.PATCH_THRESHOLD,
+            "total_inspections": inspector.total_inspections if inspector else 0,
+            "total_anomalies": inspector.total_anomalies if inspector else 0,
+        }
+
+        # Check memory bank readiness
+        from modules.anomaly_detection.memory_bank import list_memory_bank_sessions
+        available_sessions = list_memory_bank_sessions()
+
+        return jsonify({
+            "success": True,
+            "camera": mgr_status,
+            "inspector": insp_status,
+            "available_sessions": available_sessions,
+            "active_session": webcam_state["active_session_id"] or session.get("session_id"),
+        })
+
+    @app.route("/api/webcam/cameras")
+    def webcam_cameras():
+        """List physical cameras detected on the host system."""
+        try:
+            cameras = list_available_cameras(max_probe=4)
+            return jsonify({"success": True, "cameras": cameras})
+        except Exception as exc:
+            return jsonify({"success": False, "error": str(exc), "cameras": []}), 500
+
+    @app.route("/api/webcam/start", methods=["POST"])
+    def webcam_start():
+        """Initialize and start live webcam inspection."""
+        data = request.get_json(silent=True) or request.form.to_dict()
+        session_id = data.get("session_id") or session.get("session_id")
+
+        if not session_id:
+            from modules.anomaly_detection.memory_bank import list_memory_bank_sessions
+            sessions = list_memory_bank_sessions()
+            if sessions:
+                session_id = sessions[-1]
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": "No reference memory bank found. Please build reference memory first.",
+                }), 400
+
+        camera_index = int(data.get("camera_index", getattr(config, "CAMERA_INDEX", 0)))
+        mode = data.get("mode", "hardware").lower()  # "hardware" or "simulated"
+        width = int(data.get("width", getattr(config, "FRAME_WIDTH", 1280)))
+        height = int(data.get("height", getattr(config, "FRAME_HEIGHT", 720)))
+        target_fps = int(data.get("target_fps", getattr(config, "TARGET_FPS", 15)))
+
+        roi = data.get("roi")
+        if roi and isinstance(roi, list) and len(roi) == 4:
+            webcam_state["active_roi"] = [float(x) for x in roi]
+        else:
+            webcam_state["active_roi"] = None
+
+        webcam_state["auto_roi"] = str(data.get("auto_roi", "false")).lower() == "true"
+
+        # 1. Initialize Inspector (Model loaded once)
+        try:
+            _get_or_init_inspector(session_id)
+        except Exception as exc:
+            app_logger.error("Failed to initialize LiveWebcamInspector: %s", exc)
+            return jsonify({
+                "success": False,
+                "error": f"Failed to initialize anomaly model: {exc}",
+            }), 500
+
+        # 2. Stop any existing webcam manager
+        if webcam_state["manager"] is not None:
+            webcam_state["stream_stop_event"].set()
+            if webcam_state["stream_thread"] is not None:
+                webcam_state["stream_thread"].join(timeout=1.5)
+            webcam_state["manager"].stop()
+
+        # 3. Create and start new WebcamManager
+        mgr = WebcamManager(
+            camera_index=camera_index,
+            width=width,
+            height=height,
+            target_fps=target_fps,
+            mode=mode,
+            simulated_folder=getattr(config, "TEST_STREAM_FOLDER", None),
+        )
+
+        success = mgr.start()
+        if not success:
+            return jsonify({
+                "success": False,
+                "error": mgr.error_message or "Failed to start camera.",
+            }), 500
+
+        webcam_state["manager"] = mgr
+        webcam_state["stream_stop_event"].clear()
+
+        # 4. Launch background inference thread for MJPEG stream
+        stream_thread = threading.Thread(
+            target=_webcam_background_inference_loop,
+            name="WebcamBackgroundInference",
+            daemon=True,
+        )
+        stream_thread.start()
+        webcam_state["stream_thread"] = stream_thread
+
+        return jsonify({
+            "success": True,
+            "session_id": session_id,
+            "camera_status": mgr.get_status(),
+        })
+
+    @app.route("/api/webcam/stop", methods=["POST"])
+    def webcam_stop():
+        """Stop camera capture and background stream."""
+        webcam_state["stream_stop_event"].set()
+        if webcam_state["stream_thread"] is not None:
+            webcam_state["stream_thread"].join(timeout=1.5)
+            webcam_state["stream_thread"] = None
+
+        if webcam_state["manager"] is not None:
+            webcam_state["manager"].stop()
+            webcam_state["manager"] = None
+
+        return jsonify({"success": True, "message": "Camera stopped successfully."})
+
+    @app.route("/api/webcam/pause", methods=["POST"])
+    def webcam_pause():
+        """Toggle pause state."""
+        if webcam_state["manager"] is not None:
+            is_paused = webcam_state["manager"].pause()
+            return jsonify({"success": True, "is_paused": is_paused})
+        return jsonify({"success": False, "error": "Camera is not running."}), 400
+
+    @app.route("/api/webcam/stream")
+    def webcam_stream():
+        """MJPEG video stream showing real-time inspection visualization."""
+        def generate_frames():
+            while True:
+                mgr = webcam_state["manager"]
+                if mgr is None or not mgr.is_running:
+                    time.sleep(0.1)
+                    continue
+
+                frame = mgr.get_latest_annotated_frame()
+                if frame is not None and frame.size > 0:
+                    ret, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    if ret:
+                        yield (
+                            b"--frame\r\n"
+                            b"Content-Type: image/jpeg\r\n\r\n"
+                            + buffer.tobytes()
+                            + b"\r\n"
+                        )
+                time.sleep(0.04)
+
+        return Response(
+            generate_frames(),
+            mimetype="multipart/x-mixed-replace; boundary=frame",
+        )
+
+    @app.route("/api/webcam/inspect_frame", methods=["POST"])
+    def webcam_inspect_frame():
+        """Accept a frame from the browser (e.g. via getUserMedia) or client,
+        run live inspection, and return full telemetry + base64 overlay.
+        """
+        # Determine session ID
+        session_id = request.form.get("session_id")
+        if not session_id and request.is_json:
+            session_id = request.json.get("session_id")
+        if not session_id:
+            session_id = session.get("session_id")
+            if not session_id:
+                from modules.anomaly_detection.memory_bank import list_memory_bank_sessions
+                sessions = list_memory_bank_sessions()
+                if sessions:
+                    session_id = sessions[-1]
+                else:
+                    return jsonify({"error": "No reference memory bank found."}), 400
+
+        # Resolve or initialize inspector (model loaded once)
+        try:
+            inspector = _get_or_init_inspector(session_id)
+        except Exception as exc:
+            return jsonify({"error": f"Failed to load anomaly model: {exc}"}), 500
+
+        # Decode frame
+        img_bgr = None
+        if "frame" in request.files:
+            file = request.files["frame"]
+            file_bytes = np.frombuffer(file.read(), np.uint8)
+            img_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        elif request.is_json and "frame" in request.json:
+            b64_data = request.json["frame"]
+            if "," in b64_data:
+                b64_data = b64_data.split(",", 1)[1]
+            try:
+                decoded = base64.b64decode(b64_data)
+                img_bgr = cv2.imdecode(np.frombuffer(decoded, np.uint8), cv2.IMREAD_COLOR)
+            except Exception as exc:
+                return jsonify({"error": f"Invalid base64 frame: {exc}"}), 400
+        elif "frame_base64" in request.form:
+            b64_data = request.form["frame_base64"]
+            if "," in b64_data:
+                b64_data = b64_data.split(",", 1)[1]
+            try:
+                decoded = base64.b64decode(b64_data)
+                img_bgr = cv2.imdecode(np.frombuffer(decoded, np.uint8), cv2.IMREAD_COLOR)
+            except Exception as exc:
+                return jsonify({"error": f"Invalid base64 frame: {exc}"}), 400
+
+        if img_bgr is None or img_bgr.size == 0:
+            return jsonify({"error": "No valid image frame received."}), 400
+
+        # Dynamic ROI parameters
+        roi = None
+        if request.is_json and "roi" in request.json:
+            roi = request.json["roi"]
+        elif "roi" in request.form:
+            try:
+                roi = json.loads(request.form["roi"])
+            except Exception:
+                pass
+
+        auto_roi = False
+        if request.is_json:
+            auto_roi = bool(request.json.get("auto_roi", False))
+        elif "auto_roi" in request.form:
+            auto_roi = request.form.get("auto_roi", "false").lower() == "true"
+
+        # Dynamic threshold override if requested
+        if request.is_json and "threshold" in request.json:
+            try:
+                inspector.set_threshold(float(request.json["threshold"]))
+            except Exception:
+                pass
+        elif "threshold" in request.form:
+            try:
+                inspector.set_threshold(float(request.form["threshold"]))
+            except Exception:
+                pass
+
+        # Run inspection
+        try:
+            res = inspector.inspect_frame(img_bgr, roi_spec=roi, auto_roi=auto_roi)
+
+            # Encode annotated frame as base64 JPEG
+            annotated_bgr = res.get("_annotated_frame")
+            overlay_b64 = ""
+            if annotated_bgr is not None:
+                _, buf = cv2.imencode(".jpg", annotated_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                overlay_b64 = "data:image/jpeg;base64," + base64.b64encode(buf).decode("utf-8")
+
+            # Encode heatmap ROI as base64 JPEG
+            heatmap_roi = res.get("_heatmap_roi")
+            heatmap_b64 = ""
+            if heatmap_roi is not None:
+                _, h_buf = cv2.imencode(".jpg", heatmap_roi, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                heatmap_b64 = "data:image/jpeg;base64," + base64.b64encode(h_buf).decode("utf-8")
+
+            # Clean output dict
+            output = {}
+            for k, v in res.items():
+                if not k.startswith("_") and not isinstance(v, np.ndarray):
+                    output[k] = v
+
+            output["overlay_base64"] = overlay_b64
+            output["heatmap_base64"] = heatmap_b64
+            output["success"] = True
+
+            return jsonify(output)
+
+        except Exception as exc:
+            app_logger.error("Live inspection error: %s", exc, exc_info=True)
+            return jsonify({"error": str(exc), "success": False}), 500
+
+    @app.route("/api/webcam/capture", methods=["POST"])
+    def webcam_capture():
+        """Save a snapshot of the current frame, overlay, heatmap, and metadata JSON."""
+        data = request.get_json(silent=True) or request.form.to_dict()
+
+        raw_frame = None
+        annotated_frame = None
+        heatmap_frame = None
+
+        # Check if frames were transmitted from browser
+        if "raw_frame" in data:
+            raw_b64 = data["raw_frame"]
+            if "," in raw_b64:
+                raw_b64 = raw_b64.split(",", 1)[1]
+            raw_frame = cv2.imdecode(np.frombuffer(base64.b64decode(raw_b64), np.uint8), cv2.IMREAD_COLOR)
+
+        if "annotated_frame" in data:
+            ann_b64 = data["annotated_frame"]
+            if "," in ann_b64:
+                ann_b64 = ann_b64.split(",", 1)[1]
+            annotated_frame = cv2.imdecode(np.frombuffer(base64.b64decode(ann_b64), np.uint8), cv2.IMREAD_COLOR)
+
+        if "heatmap_frame" in data:
+            hm_b64 = data["heatmap_frame"]
+            if "," in hm_b64:
+                hm_b64 = hm_b64.split(",", 1)[1]
+            heatmap_frame = cv2.imdecode(np.frombuffer(base64.b64decode(hm_b64), np.uint8), cv2.IMREAD_COLOR)
+
+        # Fallback to server manager if available
+        mgr = webcam_state["manager"]
+        if raw_frame is None and mgr is not None:
+            _, raw_frame, _ = mgr.get_latest_frame()
+        if annotated_frame is None and mgr is not None:
+            annotated_frame = mgr.get_latest_annotated_frame()
+
+        if raw_frame is None:
+            return jsonify({"success": False, "error": "No frame available to capture."}), 400
+        if annotated_frame is None:
+            annotated_frame = raw_frame.copy()
+
+        result_meta = data.get("result_meta") or (mgr.get_latest_result() if mgr else {}) or {}
+
+        store = webcam_state["feedback_store"]
+        cap_res = store.save_capture(
+            raw_frame=raw_frame,
+            annotated_frame=annotated_frame,
+            heatmap_frame=heatmap_frame,
+            result_meta=result_meta,
+        )
+
+        return jsonify(cap_res)
+
+    @app.route("/api/webcam/review", methods=["POST"])
+    def webcam_review():
+        """Save human expert feedback and store labeled sample into feedback dataset."""
+        data = request.get_json(silent=True) or request.form.to_dict()
+
+        expert_label = data.get("expert_label", "UNCERTAIN")
+        model_prediction = data.get("model_prediction", "UNKNOWN")
+        model_score = float(data.get("model_score", 0.0))
+        notes = data.get("notes", "")
+        quality_score = float(data.get("quality_score", 0.0))
+        capture_id = data.get("capture_id")
+
+        frame_bgr = None
+        if "frame" in data:
+            f_b64 = data["frame"]
+            if "," in f_b64:
+                f_b64 = f_b64.split(",", 1)[1]
+            frame_bgr = cv2.imdecode(np.frombuffer(base64.b64decode(f_b64), np.uint8), cv2.IMREAD_COLOR)
+
+        # Fallback to server manager
+        mgr = webcam_state["manager"]
+        if frame_bgr is None and mgr is not None:
+            _, frame_bgr, _ = mgr.get_latest_frame()
+
+        if frame_bgr is None:
+            # Check if capture_id has raw.jpg
+            if capture_id:
+                for d in os.listdir(webcam_state["feedback_store"].captures_dir):
+                    if capture_id in d:
+                        raw_file = os.path.join(webcam_state["feedback_store"].captures_dir, d, "raw.jpg")
+                        if os.path.isfile(raw_file):
+                            frame_bgr = cv2.imread(raw_file)
+                            break
+
+        if frame_bgr is None:
+            return jsonify({"success": False, "error": "No frame image provided for review."}), 400
+
+        store = webcam_state["feedback_store"]
+        review_res = store.record_expert_review(
+            frame_bgr=frame_bgr,
+            model_prediction=model_prediction,
+            model_score=model_score,
+            expert_label=expert_label,
+            notes=notes,
+            quality_score=quality_score,
+            capture_id=capture_id,
+        )
+
+        return jsonify(review_res)
+
+    @app.route("/api/webcam/history")
+    def webcam_history():
+        """Retrieve recent inspection history."""
+        store = webcam_state["feedback_store"]
+        limit = int(request.args.get("limit", 50))
+        return jsonify({"success": True, "history": store.get_history(limit=limit)})
+
+    @app.route("/api/webcam/history/clear", methods=["POST"])
+    def webcam_history_clear():
+        """Clear the inspection history list."""
+        store = webcam_state["feedback_store"]
+        store.clear_history()
+        return jsonify({"success": True, "message": "History cleared."})
+
+    @app.route("/api/webcam/history/export")
+    def webcam_history_export():
+        """Download inspection history as a CSV file."""
+        store = webcam_state["feedback_store"]
+        csv_data = store.export_csv()
+        now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        return Response(
+            csv_data,
+            mimetype="text/csv",
+            headers={
+                "Content-disposition": f"attachment; filename=fewvision_webcam_history_{now_str}.csv"
+            },
+        )
+
+    @app.route("/api/webcam/threshold", methods=["POST"])
+    def webcam_set_threshold():
+        """Dynamically update the patch anomaly threshold."""
+        data = request.get_json(silent=True) or request.form.to_dict()
+        try:
+            new_thresh = float(data.get("threshold", 0.5))
+            if webcam_state["inspector"] is not None:
+                webcam_state["inspector"].set_threshold(new_thresh)
+            return jsonify({"success": True, "threshold": new_thresh})
+        except Exception as exc:
+            return jsonify({"success": False, "error": str(exc)}), 400
+
+    @app.route("/captures/<capture_id>/<filename>")
+    def serve_capture_file(capture_id: str, filename: str):
+        """Serve saved capture files (raw.jpg, annotated.jpg, heatmap.jpg, result.json)."""
+        safe_id = secure_filename(capture_id)
+        safe_file = secure_filename(filename)
+        directory = os.path.join(config.CAPTURES_FOLDER, safe_id)
+        file_path = os.path.join(directory, safe_file)
+        if not os.path.isfile(file_path):
+            return jsonify({"error": "File not found"}), 404
+        return send_file(file_path)
+
+    @app.route("/feedback/<category>/<filename>")
+    def serve_feedback_file(category: str, filename: str):
+        """Serve saved human feedback images."""
+        if category not in {"normal", "anomaly", "uncertain"}:
+            return jsonify({"error": "Invalid category"}), 404
+        directory = os.path.join(config.FEEDBACK_FOLDER, category)
+        file_path = os.path.join(directory, secure_filename(filename))
+        if not os.path.isfile(file_path):
+            return jsonify({"error": "File not found"}), 404
+        return send_file(file_path)
+
     return app
+
 
 
 # ---------------------------------------------------------------------------

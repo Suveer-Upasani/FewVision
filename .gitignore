@@ -47,6 +47,8 @@ data/embeddings/
 data/memory_bank/
 data/inference/
 data/inspection/
+data/inspection_results/
+data/feedback/
 
 # Keep the data/ directory structure in git
 !data/.gitkeep
